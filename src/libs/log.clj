@@ -26,7 +26,7 @@
   (when (<= (log-level-index level)
             current-log-index)
     (let [time (str "[" (java.util.Date.) "]")
-          text (apply println-str time args)]
+          text (apply println-str (name level) time args)]
       (when log-to-stdout?
         (print text))
       (when log-file
@@ -40,3 +40,6 @@
 
 (defn debug [& args]
   (apply log :debug args))
+
+(defn error [& args]
+  (apply log :error args))

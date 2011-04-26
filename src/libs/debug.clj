@@ -7,6 +7,6 @@
      (prn '~x "=" x#)
      x#))
 
-(defn error [& args]
-  (apply log :error args)
+(defn fail [& args]
+  (apply error args)
   (throw (RuntimeException. (str/join " " args))))

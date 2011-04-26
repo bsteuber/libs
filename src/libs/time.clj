@@ -1,5 +1,6 @@
 (ns libs.time
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str])
+  (:import (java.util Calendar TimeZone)))
 
 (defprotocol Timeable
   (to-ms [date]))

@@ -4,7 +4,7 @@
 
 (defmacro dbg [x]
   `(let [x# ~x]
-     (prn '~x "=" x#)
+     (println '~x "=" x#)
      x#))
 
 (defn fail [& args]

@@ -10,4 +10,4 @@
   ([seq descr]
      (if (one-element? seq)
        (first seq)
-       (error descr "should contain exactly one element!\n" (print-str seq)))))
+       (fail descr "should contain exactly one element!\n" (print-str seq)))))

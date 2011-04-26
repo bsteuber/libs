@@ -22,15 +22,18 @@
 (defn set-log-file [f]
   (def log-file f))
 
+(def date-formatter (java.text.SimpleDateFormat. "yyyy-MM-dd kk:mm"))
+
 (defn log [level & args]
   (when (<= (log-level-index level)
             current-log-index)
-    (let [time (str "[" (java.util.Date.) "]")
+    (let [time (str "[" (.format date-formatter (java.util.Date.)) "]")
           text (apply println-str (name level) time args)]
       (when log-to-stdout?
-        (print text))
+        (print text)
+        (flush))
       (when log-file
-        (spit log-file text)))))
+        (spit log-file text :append true)))))
 
 (defn warn [& args]
   (apply log :warn args))

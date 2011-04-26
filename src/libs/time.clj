@@ -1,4 +1,4 @@
-(ns lib.time
+(ns libs.time
   (:require [clojure.string :as str]))
 
 (defprotocol Timeable

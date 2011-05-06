@@ -1,4 +1,5 @@
-(ns libs.translate)
+(ns libs.translate
+  (:use (libs log)))
 
 (def current-dictionary (atom nil))
 

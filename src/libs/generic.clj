@@ -1,15 +1,23 @@
 (ns libs.generic
   (:use (libs.java reflect))
-  (:refer-clojure :exclude [get set]))
+  (:refer-clojure :exclude [get set])
+  (:require [libs.java.meta :as m]))
 
 (defmulti as (fn [clazz o]
-               [clazz (class o)]))
+               [clazz (m/type o)]))
 
 (defmulti get (fn [o key]
-                [(class o) key]))
+                [(m/type o) key]))
 
 (defmulti set (fn [o key value]
-                [(class o) key]))
+                [(m/type o) key]))
+
+(defmulti on (fn [o key handler]
+               [(m/type o) key]))
+
+(defmethod get :default
+  [o key]
+  (call-getter o key))
 
 (defmethod set :default
   [o key value]
@@ -23,10 +31,13 @@
 (defn update [o key f & args]
   (set o key (apply f (get f key) args)))
 
-(defmethod as [Object clojure.lang.ILookup]
+(defmethod as [Object clojure.lang.IPersistentMap]
   [clazz m]
   (set-all (call-constructor clazz)
            m))
 
-(defmulti on (fn [o key handler]
-               [(class o) key]))
+(defmethod as [Object clojure.lang.Sequential]
+  [clazz seq]
+  (set-all (call-constructor clazz)
+           (partition 2 seq)))
+

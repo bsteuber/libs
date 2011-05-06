@@ -22,8 +22,16 @@
     (some #(% x)
           preds)))
 
+(defn all? [xs]
+  (every? identity xs))
+
 (defn and? [& preds]
   (fn [x]
-    (when (every? #(% x)
-                  preds)
-      ((last preds) x))))     ;; inefficient
+    (loop [ps preds]
+      (let [result ((first ps) x)
+            more   (next ps)]
+        (if (and result more)
+          (recur more)
+          result)))))
+
+

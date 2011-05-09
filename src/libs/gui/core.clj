@@ -1,5 +1,6 @@
 (ns libs.gui.core
-  (libs debug))
+  (:use (libs debug)
+        [libs.generic :only [as]]))
 
 (def gui-impl nil)
 

@@ -15,6 +15,9 @@
 (defmulti on (fn [o key handler]
                [(m/type o) key]))
 
+(defn make [clazz & args]
+  (as clazz args))
+
 (defmethod get :default
   [o key]
   (call-getter o key))
@@ -22,6 +25,13 @@
 (defmethod set :default
   [o key value]
   (call-setter o key value))
+
+(defmethod set [Object :on]
+  [o key handlers]
+  (doseq [[key handler] (if (map? handlers)
+                          handlers
+                          (partition 2 handlers))]
+    (on o key handler)))
 
 (defn set-all [o kv-pairs]
   (doseq [[k v] kv-pairs]

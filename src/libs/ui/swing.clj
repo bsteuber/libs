@@ -1,7 +1,6 @@
-(ns libs.gui.impl.swing
+(ns libs.ui.swing
   (:use (clojure.contrib miglayout)
-        (libs args imperative translate)
-        (libs.gui core))
+        (libs args imperative translate ui))
   (:require [clojure.java.io :as io]
             [libs.generic    :as g]
             [libs.java.meta  :as m])
@@ -14,8 +13,7 @@
            (java.awt.event ActionListener
                            KeyAdapter
                            KeyEvent
-                           MouseAdapter
-                           )
+                           MouseAdapter)
            (javax.swing AbstractButton
                         BorderFactory
                         Box
@@ -48,7 +46,7 @@
                               PopupMenuListener)
            (javax.swing.text JTextComponent)))
 
-(def-impl-classes
+(g/def-backend
   :swing
   label               JLabel
   button              JButton

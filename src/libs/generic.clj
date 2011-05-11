@@ -1,6 +1,7 @@
 (ns libs.generic
-  (:use (libs.java reflect))
   (:refer-clojure :exclude [get set])
+  (:use (libs debug)
+        (libs.java reflect))
   (:require [libs.java.meta :as m]))
 
 (defmulti as (fn [clazz o]
@@ -51,3 +52,26 @@
   (set-all (call-constructor clazz)
            (partition 2 seq)))
 
+(def ^:dynamic *backends* {:ui :swing})
+
+(defn set-backend [frontend backend]
+  (alter-var-root #'*backends* assoc frontend backend))
+
+(defmulti backend-class (fn [backend name]
+                          [backend name]))
+
+(defmethod backend-class :default
+  [backend type]
+  (fail "No implementation for type" type "in backend" backend))
+
+(defmacro def-backend [backend-name & args]
+  `(do ~@(for [[name class] (partition 2 args)]
+           `(defmethod backend-class [~backend-name ~(keyword name)]
+              [_# _#]
+              ~class))))
+
+(defmacro def-frontend [frontend-name & fnames]
+  `(do ~@(for [name fnames]
+           `(defn ~name [& args#]
+              (as (backend-class (*backends* ~frontend-name) ~(keyword name))
+                  args#)))))

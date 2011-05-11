@@ -14,6 +14,12 @@
   [b w]
   (fail "No implementation for widget" w "in backend" b))
 
+(defmacro def-impl-classes [backend & args]
+  `(do ~@(for [[name class] (partition 2 args)]
+           `(defmethod impl-class [~backend ~(keyword name)]
+              [_# _#]
+              ~class))))
+
 (defmacro def-impl-specific [& names]
   `(do ~@(for [name names]
            `(defn ~name [& args#]
@@ -28,6 +34,7 @@
   titled-border
   horizontal
   vertical
+  splitter
   grid
   tabs
   form

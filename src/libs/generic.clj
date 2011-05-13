@@ -10,8 +10,14 @@
 (defmulti get (fn [o key]
                 [(m/type o) key]))
 
+(defmulti get1 (fn [o key]
+                 (m/type o)))
+
 (defmulti set (fn [o key value]
                 [(m/type o) key]))
+
+(defmulti set1 (fn [o key value]
+                 (m/type o)))
 
 (defmulti on (fn [o key handler]
                [(m/type o) key]))
@@ -21,9 +27,29 @@
 
 (defmethod get :default
   [o key]
+  (get1 o key))
+
+(defmethod get1 :default
+  [o key]
   (call-getter o key))
 
+(defmethod get1 clojure.lang.ILookup
+  [o key]
+  (core/get o key))
+
+(defmethod get1 clojure.lang.IPersistentSet
+  [o key]
+  (core/get o key))
+
+(defmethod get1 clojure.lang.IDeref
+  [o key]
+  (get @o key))
+
 (defmethod set :default
+  [o key value]
+  (set1 o key value))
+
+(defmethod set1 :default
   [o key value]
   (call-setter o key value))
 

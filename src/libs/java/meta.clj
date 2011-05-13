@@ -1,6 +1,7 @@
 (ns libs.java.meta
   "Attach arbitrary metadata to Java objects"
   (:refer-clojure :exclude [meta type])
+  (:require [clojure.core :as core])
   (:import (java.util WeakHashMap)))
 
 (defn reset-meta-map []
@@ -22,4 +23,4 @@
 
 (defn type [o]
   (or (meta o)
-      (class o)))
+      (core/type o)))

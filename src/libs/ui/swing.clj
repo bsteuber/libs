@@ -296,6 +296,14 @@
                    :value-atom current-value)
     outer-panel))
 
+(defmethod g/get1 ::form
+  [o key]
+  (-> o
+      m/meta
+      :form-mapping
+      key
+      (g/get :value)))
+
 (defmethod g/get [::form :value]
   [o _]
   (let [m (:form-mapping (m/meta o))]

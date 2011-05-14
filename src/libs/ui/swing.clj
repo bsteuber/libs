@@ -1,6 +1,7 @@
 (ns libs.ui.swing
   (:use (clojure.contrib miglayout)
-        (libs args imperative translate ui))
+        (libs args imperative translate ui)
+        (libs.java reflect))
   (:require [clojure.java.io :as io]
             [libs.generic    :as g]
             [libs.java.meta  :as m])
@@ -9,7 +10,7 @@
                      Component
                      Dimension
                      Event
-                     GridLayout)
+                     Window)
            (java.awt.event ActionListener
                            KeyAdapter
                            KeyEvent
@@ -67,6 +68,12 @@
   splitter            JSplitPane
   ask-user            ::ask-user
   message             ::message)
+
+(defmethod g/set [Component :content]
+  [o _ x]
+  (cond (sequential? x) (set o :children x)
+        (string? x)     (set o :text x)
+        (ifn? x)        (on o :action x)))
 
 (defmethod g/set [JComponent :title]
   [o _ text]
@@ -262,9 +269,11 @@
 
 (defmethod g/as [::icon Sequential]
   [_ args]
-  (let [[{:keys [source]}
-         args]               (parse-options [:source] args)
-         lbl (apply label :icon source args)]
+  (let [[{:keys [content]}
+         args]               (->> args
+                                  process-content-arg
+                                  (parse-options [:content]))
+         lbl (apply label :icon content args)]
     (m/assoc-meta! lbl :type ::icon)
     lbl))
 
@@ -363,15 +372,26 @@
                               (str value)
                               "")))))))))
 
-(defn close-frame [frame]
-  (.setVisible frame false)
-  (.dispose frame))
-
-(defmethod g/set [JFrame :open]
+(defmethod g/set [Window :open]
   [o _ open?]
   (when open?
     (.pack o)
     (.setVisible o true)))
+
+(defmethod g/set [Window :close]
+  [o _ close?]
+  (when close?
+    (.setVisible o false)
+    (.dispose o)))
+
+(defmethod g/as [JFrame Sequential]
+  [clazz args]
+  (let [[args open?] (->> args
+                          (process-content-arg)
+                          (parse-options [:open?]))
+        o (g/set-all (call-constructor clazz)
+                     (partition 2 args))]
+    (g/conf o :open open?)))
 
 (defn key-name [key-event]
   (str (.getKeyModifiers key-event)

@@ -1,10 +1,11 @@
 (ns libs.args
   (:use (libs predicates)))
 
-(defn parse-last-arg [args]
+(defn process-content-arg [args]
   (if (even? (count args))
     args
-    [(last args) (butlast args)]))
+    (concat (butlast args)
+            [:content, (last args)])))
 
 (defn parse-options [option-keys args]
   (let [paired-args (partition 2 args)

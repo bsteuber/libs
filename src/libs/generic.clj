@@ -1,6 +1,6 @@
 (ns libs.generic
   (:refer-clojure :exclude [get set])
-  (:use (libs debug)
+  (:use (libs args debug)
         (libs.java reflect))
   (:require [clojure.core :as core]
             [libs.java.meta :as m])
@@ -27,9 +27,6 @@
 
 (defmulti on (fn [o key handler]
                [(m/type o) key]))
-
-(defn make [clazz & args]
-  (as clazz args))
 
 (defmethod get :default
   [o key]
@@ -66,13 +63,19 @@
                           (partition 2 handlers))]
     (on o key handler)))
 
+(defn update [o key f & args]
+  (set o key (apply f (get f key) args)))
+
 (defn set-all [o kv-pairs]
-  (doseq [[k v] kv-pairs]
+  (doseq [[k v] (process-content-arg kv-pairs)]
     (set o k v))
   o)
 
-(defn update [o key f & args]
-  (set o key (apply f (get f key) args)))
+(defn make [clazz & args]
+  (as clazz args))
+
+(defn conf [o & args]
+  (set-all o args))
 
 (defmethod as [Object IPersistentMap]
   [clazz m]

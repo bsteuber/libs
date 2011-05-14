@@ -1,5 +1,6 @@
 (ns libs.ui
-  (:use [libs.generic :only [def-frontend]]))
+  (:use [libs.generic :only [def-frontend
+                             conf]]))
 
 (def-frontend :ui
   window
@@ -27,3 +28,6 @@
   progress-bar
   ask-user
   message)
+
+(defn close [o]
+  (conf o :close true))

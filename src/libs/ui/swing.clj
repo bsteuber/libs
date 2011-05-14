@@ -64,7 +64,9 @@
   dialog              JDialog
   tabs                JTabbedPane
   rigid-area          ::rigid-area
-  splitter            JSplitPane)
+  splitter            JSplitPane
+  ask-user            ::ask-user
+  message             ::message)
 
 (defmethod g/set [JComponent :title]
   [o _ text]
@@ -415,8 +417,19 @@
                 :pref-size sz
                 :max-size  sz}))
 
-(defn show-message [msg]
+(defmethod g/as [::ask-user Sequential]
+  [[& {:keys [text title]}]]
+  (= JOptionPane/YES_OPTION
+     (JOptionPane/showConfirmDialog
+      nil
+      (translate text)
+      (translate title)
+      JOptionPane/YES_NO_OPTION
+      JOptionPane/QUESTION_MESSAGE)))
+
+(defmethod g/as [::message Sequential]
+  [[& {:keys [text]}]]
   (javax.swing.JOptionPane/showMessageDialog
    nil
-   msg))
+   (translate text)))
 

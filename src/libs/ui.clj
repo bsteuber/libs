@@ -24,4 +24,6 @@
   combo-box
   options
   icon
-  progress-bar)
+  progress-bar
+  ask-user
+  message)

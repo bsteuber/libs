@@ -1,6 +1,5 @@
 (ns io.mass-rename
-  (:use clojure.java.io
-        clojure.contrib.core)
+  (:use clojure.java.io)
   (:require [clojure.string :as str]))
 
 (defn transform-filename [in-file f]

@@ -3,7 +3,8 @@
 
 (def current-dictionary (atom nil))
 
-(defn load-dictionary [file])
+(defn set-dictionary [f]
+  (reset! current-dictionary f))
 
 (defn translate [key-or-str & args]
   (let [not-translated-result (apply print-str (name key-or-str) args)]

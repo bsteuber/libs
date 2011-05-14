@@ -2,7 +2,13 @@
   (:refer-clojure :exclude [get set])
   (:use (libs debug)
         (libs.java reflect))
-  (:require [libs.java.meta :as m]))
+  (:require [clojure.core :as core]
+            [libs.java.meta :as m])
+  (:import (clojure.lang IDeref
+                         ILookup
+                         IPersistentMap
+                         IPersistentSet
+                         Sequential)))
 
 (defmulti as (fn [clazz o]
                [clazz (m/type o)]))
@@ -33,15 +39,15 @@
   [o key]
   (call-getter o key))
 
-(defmethod get1 clojure.lang.ILookup
+(defmethod get1 ILookup
   [o key]
   (core/get o key))
 
-(defmethod get1 clojure.lang.IPersistentSet
+(defmethod get1 IPersistentSet
   [o key]
   (core/get o key))
 
-(defmethod get1 clojure.lang.IDeref
+(defmethod get1 IDeref
   [o key]
   (get @o key))
 
@@ -68,12 +74,12 @@
 (defn update [o key f & args]
   (set o key (apply f (get f key) args)))
 
-(defmethod as [Object clojure.lang.IPersistentMap]
+(defmethod as [Object IPersistentMap]
   [clazz m]
   (set-all (call-constructor clazz)
            m))
 
-(defmethod as [Object clojure.lang.Sequential]
+(defmethod as [Object Sequential]
   [clazz seq]
   (set-all (call-constructor clazz)
            (partition 2 seq)))

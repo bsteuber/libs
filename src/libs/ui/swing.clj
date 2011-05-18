@@ -1,6 +1,7 @@
 (ns libs.ui.swing
   (:use (clojure.contrib miglayout)
-        (libs args imperative translate ui)
+        (libs args imperative predicates translate ui)
+        [libs.generic :only [conf on]]
         (libs.java reflect))
   (:require [clojure.java.io :as io]
             [libs.generic    :as g]
@@ -14,7 +15,8 @@
            (java.awt.event ActionListener
                            KeyAdapter
                            KeyEvent
-                           MouseAdapter)
+                           MouseAdapter
+                           WindowAdapter)
            (javax.swing AbstractButton
                         BorderFactory
                         Box
@@ -44,36 +46,42 @@
                         ListCellRenderer
                         UIManager)
            (javax.swing.event DocumentListener
+                              ListSelectionListener
                               PopupMenuListener)
            (javax.swing.text JTextComponent)))
 
 (g/def-backend
   :swing
-  label               JLabel
+  ask-user            ::ask-user
   button              JButton
-  text-field          JTextField
-  text-area           JTextArea
-  password-field      JPasswordField
   check-box           JCheckBox
   combo-box           JComboBox
-  icon                ::icon
-  progress-bar        JProgressBar
-  options             ::options
-  form                ::form
-  window              JFrame
-  panel               JPanel
   dialog              JDialog
-  tabs                JTabbedPane
+  form                ::form
+  grid                ::grid
+  horizontal          ::horizontal
+  icon                ::icon
+  label               JLabel
+  list-box            JList
+  message             ::message
+  options             ::options
+  panel               JPanel
+  password-field      JPasswordField
+  progress-bar        JProgressBar
   rigid-area          ::rigid-area
   splitter            JSplitPane
-  ask-user            ::ask-user
-  message             ::message)
+  tabs                JTabbedPane
+  text-area           JTextArea
+  text-field          JTextField
+  vertical            ::vertical
+  window              JFrame)
 
 (defmethod g/set [Component :content]
   [o _ x]
-  (cond (sequential? x) (set o :children x)
-        (string? x)     (set o :text x)
-        (ifn? x)        (on o :action x)))
+  (cond ((or? sequential? nil?) x) (g/set o :children x)
+        (string? x)                (g/set o :text x)
+        (ifn? x)                   (on o :action x)
+        :else                      (g/set o :value x)))
 
 (defmethod g/set [JComponent :title]
   [o _ text]
@@ -87,13 +95,13 @@
 (defn layout [elements]
   (apply miglayout (panel) elements))
 
-(defmethod g/set [JTabbedPane :tabs]
+(defmethod g/set [JTabbedPane :children]
   [o _ kvs]
   (doseq [[name panel] (partition 2 kvs)]
     (.addTab o (translate name) panel)))
 
-(defmethod g/as [::rigid-area IPersistentMap]
-  [_ {:keys [width height]}]
+(defmethod g/as [::rigid-area Sequential]
+  [_ [width height]]
   (Box/createRigidArea (Dimension. width height)))
 
 (defmethod g/set [JComponent :border]
@@ -163,6 +171,22 @@
   [o _ handler]
   (add-action-handler o handler))
 
+(defmethod g/get [JTextComponent :value]
+  [o _]
+  (.getText o))
+
+(defmethod g/set [JTextComponent :value]
+  [o _ val]
+  (.setText o val))
+
+(defmethod g/set [JCheckBox :value]
+  [o _ val]
+  (.setSelected o val))
+
+(defmethod g/get [JCheckBox :value]
+  [o _]
+  (.isSelected o val))
+
 (defmethod g/on [JTextComponent :change]
   [o _ handler]
   (.. o
@@ -178,6 +202,22 @@
               (removeUpdate
                [_ evt]
                (handler evt))))))
+
+(defmethod g/set [JTextComponent :columns]
+  [o _ cols]
+  (.setColumns o (Integer. cols)))
+
+(defmethod g/set [JTextComponent :rows]
+  [o _ rows]
+  (.setColumns o (Integer. rows)))
+
+(defmethod g/on [JList :change]
+  [o _ handler]
+  (.addListSelectionListener
+   o
+   (reify ListSelectionListener
+          (valueChanged [_ evt]
+                        (handler evt)))))
 
 (defmethod g/on [JComponent :popup]
   [o _  {:keys [hide show cancel]}]
@@ -248,13 +288,38 @@
    #(when-not (@disabled-combo-boxes o)
       (handler %))))
 
+(defmethod g/get [JComboBox :value]
+  [o _]
+  (.getSelectedItem o))
+
+(defmethod g/get [JList :value]
+  [o _]
+  (.getSelectedValue o))
+
+(defmethod g/get [JList :values]
+  [o _]
+  (.getSelectedValues o))
+
 (defmethod g/set [JComboBox :value]
   [o _ value]
   (swap! disabled-combo-boxes conj o)
   (.setSelectedItem o value)
   (swap! disabled-combo-boxes disj o))
 
-(defmethod g/set [JComboBox :items]
+(defmethod g/set [JList :value]
+  [o _ value]
+  (.setSelectedValue o value true))
+
+(derive JList ::list)
+(derive JComboBox ::list)
+
+(defmethod g/get [::list :children]
+  [o _]
+  (let [model (.getModel o)]
+    (doall (for [i (range (.getSize model))]
+             (.getElementAt model i)))))
+
+(defmethod g/set [JComboBox :children]
   [o _ items]
   (swap! disabled-combo-boxes conj o)
   (.removeAllItems o)
@@ -262,6 +327,10 @@
     (.addItem o i))
   (.setSelectedIndex o 0)
   (swap! disabled-combo-boxes disj o))
+
+(defmethod g/set [JList :children]
+  [o _ items]
+  (.setListData o (to-array items)))
 
 (defmethod g/set [JComponent :icon]
   [o _ source]
@@ -283,29 +352,24 @@
 
 (defmethod g/as [::options Sequential]
   [_ args]
-  (let [[{:keys [format-fn init layout items]
-          :or {format-fn str
-               layout    :horizontal}}
-         args]         (parse-options [:format-fn :init :layout :items]
-                                      args)
-         group         (ButtonGroup.)
-         current-value (atom init)
-         buttons       (for [i items]
-                         (g/make JRadioButton
-                               :text (format-fn i)
-                               :selected (= i init)
-                               :on {:click (fn [_] (reset! current-value i))}))
-         inner-panel   (case layout
-                             :horizontal (apply horizontal buttons)
-                             :vertical   (apply vertical   buttons))
-         outer-panel   (JPanel.)]
-    (doseq [b buttons]
-      (.add group b))
-    (.add outer-panel inner-panel)
-    (m/assoc-meta! outer-panel
-                   :type ::options
-                   :value-atom current-value)
-    outer-panel))
+  (with-options [[format-fn init layout content] args]
+    (let [format-fn (or format-fn str)
+          layout    (or layout :horizontal)
+          current-value (atom init)
+          buttons       (for [i content]
+                          (g/make JRadioButton
+                                  :text (format-fn i)
+                                  :selected (= i init)
+                                  :on {:click (fn [_] (reset! current-value i))}))
+          group         (g/make ButtonGroup buttons)
+          inner-panel   (case layout
+                              :horizontal (horizontal buttons)
+                              :vertical   (vertical   buttons))
+          outer-panel   (panel [inner-panel])]
+      (m/assoc-meta! outer-panel
+                     :type ::options
+                     :value-atom current-value)
+      outer-panel)))
 
 (defmethod g/get1 ::form
   [o key]
@@ -324,19 +388,17 @@
 
 (defmethod g/as [::form Sequential]
   [_ args]
-  (let [[{:keys [keys items]}
-         args] (parse-options [:keys :items]
-                              args)
-         form (grid :rows 2
-                 :items (mapcat (fn [k v]
-                                  [(label :text k)
-                                   v])
-                                keys
-                                items))]
-    (m/assoc-meta! form
-                   :type         ::form
-                   :form-mapping (zipmap keys items))
-    form))
+  (with-options [[children] args]
+    (let [form (->> children
+                    (partition 2)
+                    (mapcat (fn [[k v]]
+                              [(label k)
+                               v]))
+                    (grid :columns 2))]
+      (m/assoc-meta! form
+                     :type         ::form
+                     :form-mapping (apply hash-map children))
+      form)))
 
 (defn scrollable [o]
   (JScrollPane. o))
@@ -348,15 +410,15 @@
   "A list cell renderer that greys out items not enabled.
    :separator is also accepted instead of an item."
   []
-  (let [lbl (doto (label "")
-              (.setOpaque true)
-              (set :border 1))]
+  (let [lbl (label :text ""
+                   :opaque true
+                   :border 1)]
     (reify ListCellRenderer
            (getListCellRendererComponent
             [_ list value index selected? focus?]
             (if (= value :separator)
               (JSeparator. JSeparator/HORIZONTAL)
-              (let [[bg fg] (if-not (get :enabled? value)
+              (let [[bg fg] (if-not (g/get value :enabled?)
                               [(.getBackground list)
                                (get-ui-color "Label.disabledForeground")]
                               (if selected?
@@ -364,13 +426,14 @@
                                  (.getSelectionForeground list)]
                                 [(.getBackground list)
                                  (.getForeground list)]))]
-                (doto lbl
-                  (.setBackground bg)
-                  (.setForeground fg)
-                  (.setFont (.getFont list))
-                  (.setText (if value
+                (conf lbl
+                      :background bg
+                      :foreground fg
+                      :font (g/get list :font)
+                      :text (if value
                               (str value)
-                              "")))))))))
+                              ""))))))))
+
 
 (defmethod g/set [Window :open]
   [o _ open?]
@@ -384,14 +447,17 @@
     (.setVisible o false)
     (.dispose o)))
 
+(defmethod g/on [Window :closing]
+  [o _ handler]
+  (.addWindowListener o (proxy [WindowAdapter] []
+                            (windowClosing [evt] (handler evt)))))
+
 (defmethod g/as [JFrame Sequential]
-  [clazz args]
-  (let [[args open?] (->> args
-                          (process-content-arg)
-                          (parse-options [:open?]))
-        o (g/set-all (call-constructor clazz)
-                     (partition 2 args))]
-    (g/conf o :open open?)))
+  [_ args]
+  (with-options [[open] args]
+    (let [o (apply g/conf (JFrame.)
+                   (partition 2 args))]
+      (g/conf o :open open))))
 
 (defn key-name [key-event]
   (str (.getKeyModifiers key-event)
@@ -418,6 +484,14 @@
                   (doseq [elt (.getComponents component)]
                     (rec-add elt)))]
     (rec-add (.getContentPane o))))
+
+(defmethod g/as [JDialog Sequential]
+  [_ args]
+  (with-options [[parent] args]
+    (let [o (when parent
+              (JDialog. parent)
+              (JDialog.))]
+      g/set-all o args)))
 
 (defmethod g/set [JComponent :min-size]
   [o _ [width height]]

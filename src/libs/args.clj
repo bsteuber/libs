@@ -16,3 +16,9 @@
                                   (filter take? paired-args)))
         other-args  (apply concat (remove take? paired-args))]
     [options other-args]))
+
+(defmacro with-options [[keys args-sym] & body]
+  `(let [[{:keys ~keys}
+          ~args-sym] (parse-options ~(vec (map keyword keys))
+                                    (process-content-arg ~args-sym))]
+     ~@body))

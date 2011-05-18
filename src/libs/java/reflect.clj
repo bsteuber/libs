@@ -7,23 +7,22 @@
     (Integer. arg)
     arg))
 
-(defn find-methods [class pred]
-  (filter pred (.getMethods class)))
+(defn find-methods [class name]
+  (filter #(= (.getName %) name)
+          (.getMethods class)))
 
-(defn find-method [class pred]
-  (one-element (find-methods class pred)
-               (str "Matching methods in class " class)))
-
-(defn name-is? [name]
-  #(= (.getName %) name))
+(defn find-method [class name pred]
+  (one-element (filter pred (find-methods class name))
+               (str "Matching methods named " name " in class " class)))
 
 (def boxes?          ; TODO float etc.
   #{[Long/TYPE Long]
-    [Integer/TYPE Integer]})
+    [Integer/TYPE Integer]
+    [Boolean/TYPE Boolean]})
 
 (defn arg-match? [clazz arg]
   (let [c (class arg)]
-    (or (= c clazz)
+    (or ((supers c) clazz)
         (boxes? [clazz c]))))
 
 (defn all-args-match? [args]
@@ -33,13 +32,10 @@
                  (.getParameterTypes m)
                  args))))
 
-(defn applicable-to? [name args]
-  (and? (name-is? name)
-        (all-args-match? args)))
-
 (defn find-applicable-method [class name args]
   (find-method class
-               (applicable-to? name args)))
+               name
+               (all-args-match? args)))
 
 (defn call-method [obj method & args]
   (if-let [m (find-applicable-method (class obj)

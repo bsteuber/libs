@@ -1,6 +1,6 @@
 (ns libs.generic
   (:refer-clojure :exclude [get set])
-  (:use (libs args debug)
+  (:use (libs args debug log)
         (libs.java reflect))
   (:require [clojure.core :as core]
             [libs.java.meta :as m])
@@ -27,6 +27,9 @@
 
 (defmulti on (fn [o key handler]
                [(m/type o) key]))
+
+(defn value [x]
+  (get x :value))
 
 (defmethod get :default
   [o key]
@@ -67,7 +70,7 @@
   (set o key (apply f (get f key) args)))
 
 (defn set-all [o kv-pairs]
-  (doseq [[k v] (process-content-arg kv-pairs)]
+  (doseq [[k v] (partition 2 (process-content-arg kv-pairs))]
     (set o k v))
   o)
 
@@ -82,10 +85,14 @@
   (set-all (call-constructor clazz)
            m))
 
+(defmethod as [Object nil]
+  [clazz _]
+  (call-constructor clazz))
+
 (defmethod as [Object Sequential]
-  [clazz seq]
+  [clazz keyvals]
   (set-all (call-constructor clazz)
-           (partition 2 seq)))
+           keyvals))
 
 (def ^:dynamic *backends* {:ui :swing})
 

@@ -334,7 +334,7 @@
 
 (defmethod g/set [JComponent :icon]
   [o _ source]
-  (.setIcon (ImageIcon. (io/resource source))))
+  (.setIcon o (ImageIcon. (io/resource source))))
 
 (defmethod g/as [::icon Sequential]
   [_ args]

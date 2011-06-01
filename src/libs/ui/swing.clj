@@ -76,18 +76,47 @@
   vertical            ::vertical
   window              JFrame)
 
-(defmethod g/set [Component :content]
+(doseq [widget-type [Component
+                     ::ask-user
+                     ::form
+                     ::grid
+                     ::horizontal
+                     ::icon
+                     ::message
+                     ::options
+                     ::rigid-area
+                     ::vertical]]
+  (derive widget-type ::swing))
+
+(defmethod g/set [::swing :content]
   [o _ x]
   (cond ((or? sequential? nil?) x) (g/set o :children x)
-        (string? x)                (g/set o :text x)
+        ((or? keyword? string?) x) (g/set o :text x)
         (ifn? x)                   (on o :action x)
         :else                      (g/set o :value x)))
 
-(defmethod g/set [JComponent :title]
+(defmethod g/set [ButtonGroup :content]
+  [o _ buttons]
+  (doseq [b buttons]
+    (.add o b)))
+
+(defmethod g/set [Component :title]
+  [o _ text]
+  (.setTitle o (translate text)))
+
+(defmethod g/set [Component :text]
   [o _ text]
   (.setText o (translate text)))
 
-(defmethod g/set [JComponent :children]
+(defmethod g/set [Window :text]
+  [o _ text]
+  (.setTitle o (translate text)))
+
+(defmethod g/set [Component :tooltip]
+  [o _ tooltip]
+  (.setToolTipText o (translate tooltip)))
+
+(defmethod g/set [Component :children]
   [o _ children]
   (doseq [child children]
     (.add o child)))
@@ -117,18 +146,21 @@
   (.setBorder o (BorderFactory/createTitledBorder (translate text))))
 
 (defmethod g/as [::horizontal Sequential]
-  [_ {:keys [children]}]
-  (layout children))
+  [_ args]
+  (with-options [[content] args]
+    (layout content)))
 
 (defmethod g/as [::vertical Sequential]
-  [_ {:keys [children]}]
-  (layout (list* :layout
-                 :flowy
-                 children)))
+  [_ args]
+  (with-options [[content] args]
+    (layout (list* :layout
+                   :flowy
+                   content))))
 
 (defmethod g/as [::grid Sequential]
-  [_ {:keys [columns children]}]
-  (layout (list* :layout [:wrap columns] children)))
+  [_ args]
+  (with-options [[columns content] args]
+    (layout (list* :layout [:wrap columns] content))))
 
 (defmethod g/set [JSplitPane :orientation]
   [o _ orientation]
@@ -151,14 +183,6 @@
 (defmethod g/set [JSplitPane :right]
   [o _ elt]
   (.setRightComponent o elt))
-
-(defmethod g/set [JComponent :text]
-  [o _ text]
-  (.setText o (translate text)))
-
-(defmethod g/set [JComponent :tooltip]
-  [o _ tooltip]
-  (.setToolTipText o (translate tooltip)))
 
 (defn add-action-handler [o handler]
   (.addActionListener o
@@ -203,11 +227,11 @@
                [_ evt]
                (handler evt))))))
 
-(defmethod g/set [JTextComponent :columns]
+(defmethod g/set [JTextArea :columns]
   [o _ cols]
   (.setColumns o (Integer. cols)))
 
-(defmethod g/set [JTextComponent :rows]
+(defmethod g/set [JTextArea :rows]
   [o _ rows]
   (.setColumns o (Integer. rows)))
 
@@ -338,13 +362,10 @@
 
 (defmethod g/as [::icon Sequential]
   [_ args]
-  (let [[{:keys [content]}
-         args]               (->> args
-                                  process-content-arg
-                                  (parse-options [:content]))
-         lbl (apply label :icon content args)]
-    (m/assoc-meta! lbl :type ::icon)
-    lbl))
+  (with-options [[content] args]
+    (let [lbl (apply label :icon content args)]
+      (m/assoc-meta! lbl :type ::icon)
+      lbl)))
 
 (defmethod g/get [::options :value]
   [o _]
@@ -388,8 +409,8 @@
 
 (defmethod g/as [::form Sequential]
   [_ args]
-  (with-options [[children] args]
-    (let [form (->> children
+  (with-options [[content] args]
+    (let [form (->> content
                     (partition 2)
                     (mapcat (fn [[k v]]
                               [(label k)
@@ -397,7 +418,7 @@
                     (grid :columns 2))]
       (m/assoc-meta! form
                      :type         ::form
-                     :form-mapping (apply hash-map children))
+                     :form-mapping (apply hash-map content))
       form)))
 
 (defn scrollable [o]
@@ -455,8 +476,8 @@
 (defmethod g/as [JFrame Sequential]
   [_ args]
   (with-options [[open] args]
-    (let [o (apply g/conf (JFrame.)
-                   (partition 2 args))]
+    (let [o (g/set-all (JFrame.)
+                       args)]
       (g/conf o :open open))))
 
 (defn key-name [key-event]
@@ -476,7 +497,7 @@
   [o _ handlers]
   (.addKeyListener o (combined-key-handler handlers)))
 
-(defmethod g/on [JFrame :key-in-child]
+(defmethod g/on [Window :key-in-child]
   [o _ handlers]
   (let [handler (combined-key-handler handlers)
         rec-add (fn rec-add [component]
@@ -487,11 +508,12 @@
 
 (defmethod g/as [JDialog Sequential]
   [_ args]
-  (with-options [[parent] args]
-    (let [o (when parent
+  (with-options [[open parent] args]
+    (let [o (if parent
               (JDialog. parent)
               (JDialog.))]
-      g/set-all o args)))
+      (g/set-all o args)
+      (g/conf o :open open))))
 
 (defmethod g/set [JComponent :min-size]
   [o _ [width height]]
@@ -512,18 +534,20 @@
                 :max-size  sz}))
 
 (defmethod g/as [::ask-user Sequential]
-  [[& {:keys [text title]}]]
-  (= JOptionPane/YES_OPTION
-     (JOptionPane/showConfirmDialog
-      nil
-      (translate text)
-      (translate title)
-      JOptionPane/YES_NO_OPTION
-      JOptionPane/QUESTION_MESSAGE)))
+  [_ args]
+  (with-options [[content text title] args]
+    (= JOptionPane/YES_OPTION
+       (JOptionPane/showConfirmDialog
+        nil
+        (translate (or text content))
+        (translate (or title :Question))
+        JOptionPane/YES_NO_OPTION
+        JOptionPane/QUESTION_MESSAGE))))
 
 (defmethod g/as [::message Sequential]
-  [[& {:keys [text]}]]
-  (javax.swing.JOptionPane/showMessageDialog
-   nil
-   (translate text)))
+  [_ args]
+  (with-options [[content text] args]
+    (javax.swing.JOptionPane/showMessageDialog
+     nil
+     (translate (or text content)))))
 

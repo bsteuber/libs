@@ -22,7 +22,8 @@
 
 (defn arg-match? [clazz arg]
   (let [c (class arg)]
-    (or ((supers c) clazz)
+    (or (= c clazz)
+        ((supers c) clazz)
         (boxes? [clazz c]))))
 
 (defn all-args-match? [args]

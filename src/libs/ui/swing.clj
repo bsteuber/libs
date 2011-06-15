@@ -63,10 +63,12 @@
   icon                ::icon
   label               JLabel
   list-box            JList
+  menu                JMenu
   message             ::message
   options             ::options
   panel               JPanel
   password-field      JPasswordField
+  popup-menu          JPopupMenu
   progress-bar        JProgressBar
   rigid-area          ::rigid-area
   splitter            JSplitPane
@@ -87,6 +89,9 @@
                      ::rigid-area
                      ::vertical]]
   (derive widget-type ::swing))
+
+(derive JMenu ::menu)
+(derive JPopupMenu ::menu)
 
 (defmethod g/set [::swing :content]
   [o _ x]
@@ -242,6 +247,18 @@
    (reify ListSelectionListener
           (valueChanged [_ evt]
                         (handler evt)))))
+
+(defn menu-item [text handler]
+  (make JMenuItem
+        :text text
+        handler))
+
+(defmethod g/set [::menu :children]
+  [o _ entries]
+  (doseq [e (->> entries
+                 (partition 2)
+                 (map menu-item))]
+    (.add o e)))
 
 (defmethod g/set [::swing :popup-menu]
   [o _ menu]

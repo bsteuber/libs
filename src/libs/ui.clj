@@ -15,11 +15,12 @@
   icon
   label
   list-box
+  menu
   message
   options
   panel
   password-field
-  popup
+  popup-menu
   progress-bar
   rigid-area
   splitter
@@ -28,8 +29,7 @@
   text-field
   titled-border
   vertical
-  window
-  )
+  window)
 
 (defn close [o]
   (conf o :close true))

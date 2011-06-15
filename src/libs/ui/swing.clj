@@ -243,6 +243,13 @@
           (valueChanged [_ evt]
                         (handler evt)))))
 
+(defmethod g/set [::swing :popup-menu]
+  [o _ menu]
+  (g/on o :right-click (fn [e] (.show menu
+                                     (.getComponent e)
+                                     (.getX e)
+                                     (.getY e)))))
+
 (defmethod g/on [JComponent :popup]
   [o _  {:keys [hide show cancel]}]
   (.addPopupMenuListener

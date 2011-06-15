@@ -3,31 +3,33 @@
                              conf]]))
 
 (def-frontend :ui
-  window
-  dialog
-  panel
-  border
-  titled-border
-  horizontal
-  vertical
-  splitter
-  grid
-  tabs
-  form
-  rigid-area
-  label
-  button
-  text-field
-  text-area
-  password-field
-  check-box
-  list-box
-  combo-box
-  options
-  icon
-  progress-bar
   ask-user
-  message)
+  border
+  button
+  check-box
+  combo-box
+  dialog
+  form
+  grid
+  horizontal
+  icon
+  label
+  list-box
+  message
+  options
+  panel
+  password-field
+  popup
+  progress-bar
+  rigid-area
+  splitter
+  tabs
+  text-area
+  text-field
+  titled-border
+  vertical
+  window
+  )
 
 (defn close [o]
   (conf o :close true))

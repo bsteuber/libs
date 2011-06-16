@@ -1,7 +1,7 @@
 (ns libs.regex
   (:require [net.cgrand.regex :as re])
   (:use clojure.test)
-  (:import (net.cgrand.regex) Regex))
+  (:import (net.cgrand.regex Regex)))
 
 (defn literal-regex [pattern]
   (Regex. pattern nil))

@@ -33,8 +33,11 @@
                         JPanel
                         JLabel
                         JList
+                        JMenu
+                        JMenuItem
                         JOptionPane
                         JPasswordField
+                        JPopupMenu
                         JProgressBar
                         JRadioButton
                         JSeparator
@@ -249,7 +252,7 @@
                         (handler evt)))))
 
 (defn menu-item [text handler]
-  (make JMenuItem
+  (g/make JMenuItem
         :text text
         handler))
 

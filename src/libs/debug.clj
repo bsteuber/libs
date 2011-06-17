@@ -14,10 +14,5 @@
 
 ;; Overwrite this using a hook
 (defn handle-error [e]
-  (let [trace ((with-out-str (print-cause-trace e)))]
+  (let [trace (with-out-str (print-cause-trace e))]
     (fail trace)))
-
-(defmacro future* [& body]
-  `(future (try ~@body
-                (catch Throwable e#
-                  (handle-error e#)))))

@@ -35,12 +35,12 @@
   `(bind  ~(butlast args)
      ~(last args)))
 
-;; TODO docstring etc.
-(defmacro def* [lhs & args]
-  (where `(def ~name
-            ~rhs)
-    [meta-args rhs] (loop [forms args
-                           meta-args ()]
-                      (with [next-arg & more-args]  )
-                 )
-    [name rhs] (transform-binding lhs rhs)))
+;; ;; TODO docstring etc.
+;; (defmacro def* [lhs & args]
+;;   (where `(def ~name
+;;             ~rhs)
+;;     [meta-args rhs] (loop [forms args
+;;                            meta-args ()]
+;;                       (with [next-arg & more-args]  )
+;;                  )
+;;     [name rhs] (transform-binding lhs rhs)))

@@ -71,7 +71,14 @@
 
 (defn set-all [o kv-pairs]
   (doseq [[k v] (partition 2 (process-content-arg kv-pairs))]
-    (set o k v))
+    (try (set o k v)
+         (catch Exception e
+           (error "Error in generic setter:"
+                 "\n  slot:       " k
+                 "\n  class:      " (class o)
+                 "\n  value:      " v
+                 "\n  value class:" (class v))
+           (throw e))))
   o)
 
 (defn make [clazz & args]

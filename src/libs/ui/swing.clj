@@ -47,6 +47,7 @@
                         JTextArea
                         JTextField
                         ListCellRenderer
+                        SwingUtilities
                         UIManager)
            (javax.swing.event DocumentListener
                               ListSelectionListener
@@ -80,6 +81,11 @@
   text-field          JTextField
   vertical            ::vertical
   window              JFrame)
+
+(defmacro invoke-later [& body]
+  `(SwingUtilities/invokeLater
+    (fn []
+      ~@body)))
 
 (doseq [widget-type [Component
                      ::ask-user
@@ -235,14 +241,6 @@
                [_ evt]
                (handler evt))))))
 
-(defmethod g/set [JTextArea :columns]
-  [o _ cols]
-  (.setColumns o (Integer. cols)))
-
-(defmethod g/set [JTextArea :rows]
-  [o _ rows]
-  (.setColumns o (Integer. rows)))
-
 (defmethod g/on [JList :change]
   [o _ handler]
   (.addListSelectionListener
@@ -269,6 +267,16 @@
                                      (.getComponent e)
                                      (.getX e)
                                      (.getY e)))))
+
+(defmethod g/set [::swing :background]
+  [o _ color]
+  (when color
+    (.setBackground o color)))
+
+(defmethod g/set [::swing :foreground]
+  [o _ color]
+  (when color
+    (.setForeground o color)))
 
 (defmethod g/on [JComponent :popup]
   [o _  {:keys [hide show cancel]}]
@@ -478,9 +486,8 @@
                       :background bg
                       :foreground fg
                       :font (g/get list :font)
-                      :text (if value
-                              (str value)
-                              ""))))))))
+                      :text (str value))
+                lbl))))))
 
 
 (defmethod g/set [Window :open]
@@ -577,4 +584,3 @@
     (javax.swing.JOptionPane/showMessageDialog
      nil
      (translate (or text content)))))
-

@@ -28,6 +28,9 @@
 (defmulti on (fn [o key handler]
                [(m/type o) key]))
 
+(defmulti config (fn [o  _]
+                   (m/type o)))
+
 (defn value [x]
   (get x :value))
 
@@ -69,58 +72,32 @@
 (defn update [o key f & args]
   (set o key (apply f (get f key) args)))
 
-(defn set-all [o kv-pairs]
-  (doseq [[k v] (partition 2 (process-content-arg kv-pairs))]
-    (try (set o k v)
-         (catch Exception e
-           (error "Error in generic setter:"
-                 "\n  slot:       " k
-                 "\n  class:      " (class o)
-                 "\n  value:      " v
-                 "\n  value class:" (class v))
-           (throw e))))
+(defn set-all [o args]
+  (let [args (if (map? args)
+               args
+               (partition 2 args))]
+    (doseq [[k v] (process-content-arg args)]
+      (try (set o k v)
+           (catch Exception e
+             (error "Error in generic setter:"
+                    "\n  slot:       " k
+                    "\n  class:      " (class o)
+                    "\n  value:      " v
+                    "\n  value class:" (class v))
+             (throw e)))))
   o)
 
-(defn make [clazz & args]
-  (as clazz args))
-
-(defn conf [o & args]
+(defmethod config :default [o args]
   (set-all o args))
 
-(defmethod as [Object IPersistentMap]
-  [clazz m]
-  (set-all (call-constructor clazz)
-           m))
+(defn conf [o & args]
+  (config o args))
 
-(defmethod as [Object nil]
-  [clazz _]
-  (call-constructor clazz))
+(defn make [clazz & args]
+  (config (call-constructor clazz)
+          args))
 
-(defmethod as [Object Sequential]
-  [clazz keyvals]
-  (set-all (call-constructor clazz)
-           keyvals))
-
-(def ^:dynamic *backends* {:ui :swing})
-
-(defn set-backend [frontend backend]
-  (alter-var-root #'*backends* assoc frontend backend))
-
-(defmulti backend-class (fn [backend name]
-                          [backend name]))
-
-(defmethod backend-class :default
-  [backend type]
-  (fail "No implementation for type" type "in backend" backend))
-
-(defmacro def-backend [backend-name & args]
-  `(do ~@(for [[name class] (partition 2 args)]
-           `(defmethod backend-class [~backend-name ~(keyword name)]
-              [_# _#]
-              ~class))))
-
-(defmacro def-frontend [frontend-name & fnames]
-  `(do ~@(for [name fnames]
-           `(defn ~name [& args#]
-              (as (backend-class (*backends* ~frontend-name) ~(keyword name))
-                  args#)))))
+(defmethod as :default
+  [clazz args]
+  (config (call-constructor clazz)
+          args))

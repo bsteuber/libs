@@ -1,7 +1,7 @@
 (ns libs.ui.swing
   (:use (clojure.contrib miglayout)
-        (libs args imperative predicates translate ui)
-        [libs.generic :only [conf on]]
+        (libs args imperative predicates translate)
+        [libs.generic :only [conf config on set-all]]
         (libs.java reflect))
   (:require [clojure.java.io :as io]
             [libs.generic    :as g]
@@ -54,33 +54,123 @@
                               PopupMenuListener)
            (javax.swing.text JTextComponent)))
 
-(g/def-backend
-  :swing
-  ask-user            ::ask-user
-  button              JButton
-  check-box           JCheckBox
-  combo-box           JComboBox
-  dialog              JDialog
-  form                ::form
-  grid                ::grid
-  horizontal          ::horizontal
-  icon                ::icon
-  label               JLabel
-  list-box            JList
-  menu                JMenu
-  message             ::message
-  options             ::options
-  panel               JPanel
-  password-field      JPasswordField
-  popup-menu          JPopupMenu
-  progress-bar        JProgressBar
-  rigid-area          ::rigid-area
-  splitter            JSplitPane
-  tabs                JTabbedPane
-  text-area           JTextArea
-  text-field          JTextField
-  vertical            ::vertical
-  window              JFrame)
+(defn window [& args]
+  (config (JFrame.) args))
+
+(defn dialog [& args]
+  (with-options [[parent] args]
+    (let [o (if parent
+              (JDialog. parent)
+              (JDialog.))]
+      (config o args))))
+
+(defn button [& args]
+  (config (JButton.) args))
+
+(defn check-box [& args]
+  (config (JCheckBox.) args))
+
+(defn combo-box [& args]
+  (config (JComboBox.) args))
+
+(defn label [& args]
+  (config (JLabel.) args))
+
+(defn list-box [& args]
+  (config (JList.) args))
+
+(defn menu [& args]
+  (config (JMenu.) args))
+
+(defn panel [& args]
+  (config (JPanel.) args))
+
+(defn password-field [& args]
+  (config (JPasswordField.) args))
+
+(defn popup-menu [& args]
+  (config (JPopupMenu.) args))
+
+(defn progress-bar [& args]
+  (config (JProgressBar.) args))
+
+(defn splitter [& args]
+  (config (JSplitPane.) args))
+
+(defn tabs [& args]
+  (config (JTabbedPane.) args))
+
+(defn text-area [& args]
+  (config (JTextArea.) args))
+
+(defn text-field [& args]
+  (config (JTextField.) args))
+
+(defn layout [elements]
+  (apply miglayout (panel) elements))
+
+(defn horizontal [& args]
+  (with-options [[content] args]
+    (layout content)))
+
+(defn vertical [& args]
+  (with-options [[content] args]
+    (layout (list* :layout
+                   :flowy
+                   content))))
+
+(defn ask-user
+  ([text] (ask-user :Question text))
+  ([title text]
+     (= JOptionPane/YES_OPTION
+        (JOptionPane/showConfirmDialog
+         nil
+         (translate text)
+         (translate title)
+         JOptionPane/YES_NO_OPTION
+         JOptionPane/QUESTION_MESSAGE))))
+
+(defn message [text]
+  (JOptionPane/showMessageDialog
+   nil
+   (translate text)))
+
+(defn rigid-area [width height]
+  (Box/createRigidArea (Dimension. width height)))
+
+(defn grid [& args]
+  (with-options [[columns content] args]
+    (layout (list* :layout [:wrap columns] content))))
+
+(defn icon [& args]
+  (with-options [[content] args]
+    (let [lbl (apply label :icon content args)]
+      (m/assoc-meta! lbl :type ::icon)
+      lbl)))
+
+
+(defn form [& args]
+  (with-options [[content] args]
+    (let [form (->> content
+                    (partition 2)
+                    (mapcat (fn [[k v]]
+                              [(label k)
+                               v]))
+                    (grid :columns 2))]
+      (m/assoc-meta! form
+                     :type         ::form
+                     :form-mapping (apply hash-map content))
+      form)))
+
+(defn scrollable [o]
+  (JScrollPane. o))
+
+(defn close [o]
+  (conf o :close true))
+
+(defn open [o]
+  (conf o :open true))
+
 
 (defmacro invoke-later [& body]
   `(SwingUtilities/invokeLater
@@ -135,17 +225,10 @@
   (doseq [child children]
     (.add o child)))
 
-(defn layout [elements]
-  (apply miglayout (panel) elements))
-
 (defmethod g/set [JTabbedPane :children]
   [o _ kvs]
   (doseq [[name panel] (partition 2 kvs)]
     (.addTab o (translate name) panel)))
-
-(defmethod g/as [::rigid-area Sequential]
-  [_ [width height]]
-  (Box/createRigidArea (Dimension. width height)))
 
 (defmethod g/set [JComponent :border]
   [o _ borders]
@@ -158,23 +241,6 @@
 (defmethod g/set [JComponent :titled-border]
   [o _ text]
   (.setBorder o (BorderFactory/createTitledBorder (translate text))))
-
-(defmethod g/as [::horizontal Sequential]
-  [_ args]
-  (with-options [[content] args]
-    (layout content)))
-
-(defmethod g/as [::vertical Sequential]
-  [_ args]
-  (with-options [[content] args]
-    (layout (list* :layout
-                   :flowy
-                   content))))
-
-(defmethod g/as [::grid Sequential]
-  [_ args]
-  (with-options [[columns content] args]
-    (layout (list* :layout [:wrap columns] content))))
 
 (defmethod g/set [JSplitPane :orientation]
   [o _ orientation]
@@ -395,19 +461,11 @@
   [o _ source]
   (.setIcon o (ImageIcon. (io/resource source))))
 
-(defmethod g/as [::icon Sequential]
-  [_ args]
-  (with-options [[content] args]
-    (let [lbl (apply label :icon content args)]
-      (m/assoc-meta! lbl :type ::icon)
-      lbl)))
-
 (defmethod g/get [::options :value]
   [o _]
   @(:value-atom (m/meta o)))
 
-(defmethod g/as [::options Sequential]
-  [_ args]
+(defn options [& args]
   (with-options [[format-fn init layout content] args]
     (let [format-fn (or format-fn str)
           layout    (or layout :horizontal)
@@ -441,23 +499,6 @@
     (zipmap (keys m)
             (map #(get % :value)
                  (vals m)))))
-
-(defmethod g/as [::form Sequential]
-  [_ args]
-  (with-options [[content] args]
-    (let [form (->> content
-                    (partition 2)
-                    (mapcat (fn [[k v]]
-                              [(label k)
-                               v]))
-                    (grid :columns 2))]
-      (m/assoc-meta! form
-                     :type         ::form
-                     :form-mapping (apply hash-map content))
-      form)))
-
-(defn scrollable [o]
-  (JScrollPane. o))
 
 (defn get-ui-color [descr-string]
   (UIManager/getColor descr-string))
@@ -507,12 +548,12 @@
   (.addWindowListener o (proxy [WindowAdapter] []
                             (windowClosing [evt] (handler evt)))))
 
-(defmethod g/as [JFrame Sequential]
-  [_ args]
+(defmethod config Window
+  [o args]
   (with-options [[open] args]
-    (let [o (g/set-all (JFrame.)
-                       args)]
-      (g/conf o :open open))))
+    (let [o (set-all o args)]
+      (g/set o :open open)
+      o)))
 
 (defn key-name [key-event]
   (str (.getKeyModifiers key-event)
@@ -540,15 +581,6 @@
                     (rec-add elt)))]
     (rec-add (.getContentPane o))))
 
-(defmethod g/as [JDialog Sequential]
-  [_ args]
-  (with-options [[open parent] args]
-    (let [o (if parent
-              (JDialog. parent)
-              (JDialog.))]
-      (g/set-all o args)
-      (g/conf o :open open))))
-
 (defmethod g/set [JComponent :min-size]
   [o _ [width height]]
   (.setMinimumSize o (Dimension. width height)))
@@ -563,24 +595,6 @@
 
 (defmethod g/set [JComponent :size]
   [o _ sz]
-  (g/set-all o {:min-size  sz
-                :pref-size sz
-                :max-size  sz}))
-
-(defmethod g/as [::ask-user Sequential]
-  [_ args]
-  (with-options [[content text title] args]
-    (= JOptionPane/YES_OPTION
-       (JOptionPane/showConfirmDialog
-        nil
-        (translate (or text content))
-        (translate (or title :Question))
-        JOptionPane/YES_NO_OPTION
-        JOptionPane/QUESTION_MESSAGE))))
-
-(defmethod g/as [::message Sequential]
-  [_ args]
-  (with-options [[content text] args]
-    (javax.swing.JOptionPane/showMessageDialog
-     nil
-     (translate (or text content)))))
+  (set-all o {:min-size  sz
+              :pref-size sz
+              :max-size  sz}))

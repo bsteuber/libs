@@ -467,7 +467,7 @@
 
 (defn options [& args]
   (with-options [[format-fn init layout content] args]
-    (let [format-fn (or format-fn str)
+    (let [format-fn (or format-fn translate)
           layout    (or layout :horizontal)
           current-value (atom init)
           buttons       (for [i content]

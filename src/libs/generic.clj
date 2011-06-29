@@ -75,8 +75,8 @@
 (defn set-all [o args]
   (let [args (if (map? args)
                args
-               (partition 2 args))]
-    (doseq [[k v] (process-content-arg args)]
+               (partition 2 (process-content-arg args)))]
+    (doseq [[k v] args]
       (try (set o k v)
            (catch Exception e
              (error "Error in generic setter:"

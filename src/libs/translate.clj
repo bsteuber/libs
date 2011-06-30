@@ -6,14 +6,13 @@
 (defn set-dictionary [f]
   (reset! current-dictionary f))
 
-(defn translate [key-or-str & args]
-  (let [not-translated-result (apply print-str (name key-or-str) args)]
-    (if (keyword? key-or-str)
+(defn translate [o & args]
+  (if-not (keyword? o)
+    (str o)
+    (let [default-result (apply print-str (name o) args)]
       (if-let [dict @current-dictionary]
-        (if-let [res (apply dict key-or-str args)]
+        (if-let [res (apply dict o args)]
           res
-          (do (warn "No translation found for" key-or-str)
-              not-translated-result))
-        (do (warn "No dictionary loaded!")
-            not-translated-result))
-      not-translated-result)))
+          (do (warn "No translation found for" o)
+              default-result))
+        default-result))))

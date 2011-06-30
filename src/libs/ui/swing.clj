@@ -1,9 +1,10 @@
 (ns libs.ui.swing
   (:use (clojure.contrib miglayout)
-        (libs args imperative predicates translate)
+        (libs args log predicates translate)
         [libs.generic :only [conf config on set-all]]
         (libs.java reflect))
   (:require [clojure.java.io :as io]
+            [clojure.string  :as str]
             [libs.generic    :as g]
             [libs.java.meta  :as m])
   (:import (clojure.lang IPersistentMap Sequential)
@@ -17,7 +18,8 @@
                            KeyEvent
                            MouseAdapter
                            WindowAdapter)
-           (javax.swing AbstractButton
+           (javax.swing AbstractAction
+                        AbstractButton
                         BorderFactory
                         Box
                         BoxLayout
@@ -46,6 +48,7 @@
                         JTabbedPane
                         JTextArea
                         JTextField
+                        KeyStroke
                         ListCellRenderer
                         SwingUtilities
                         UIManager)
@@ -85,9 +88,6 @@
 (defn panel [& args]
   (config (JPanel.) args))
 
-(defn password-field [& args]
-  (config (JPasswordField.) args))
-
 (defn popup-menu [& args]
   (config (JPopupMenu.) args))
 
@@ -101,10 +101,13 @@
   (config (JTabbedPane.) args))
 
 (defn text-area [& args]
-  (config (JTextArea.) args))
+  (config (JTextArea. 3 15) args))
 
 (defn text-field [& args]
-  (config (JTextField.) args))
+  (config (JTextField. 15) args))
+
+(defn password-field [& args]
+  (config (JPasswordField. 15) args))
 
 (defn layout [elements]
   (apply miglayout (panel) elements))
@@ -142,13 +145,6 @@
   (with-options [[columns content] args]
     (layout (list* :layout [:wrap columns] content))))
 
-(defn icon [& args]
-  (with-options [[content] args]
-    (let [lbl (apply label :icon content args)]
-      (m/assoc-meta! lbl :type ::icon)
-      lbl)))
-
-
 (defn form [& args]
   (with-options [[content] args]
     (let [form (->> content
@@ -156,11 +152,33 @@
                     (mapcat (fn [[k v]]
                               [(label k)
                                v]))
+                    (list* :column "[]20[]")
                     (grid :columns 2))]
       (m/assoc-meta! form
                      :type         ::form
                      :form-mapping (apply hash-map content))
       form)))
+
+(defn options [& args]
+  (with-options [[format-fn init layout content] args]
+    (let [format-fn (or format-fn translate)
+          layout    (or layout :horizontal)
+          current-value (atom init)
+          buttons       (for [i content]
+                          (g/conf (JRadioButton.)
+                                  :text (format-fn i)
+                                  :selected (= i init)
+                                  :on {:click (fn [_] (reset! current-value i))}))
+          group         (g/make ButtonGroup buttons)
+          inner-panel   (case layout
+                              :horizontal (horizontal (list* :layout "ins 0"
+                                                             buttons))
+                              :vertical   (vertical   buttons))
+          outer-panel   (panel [inner-panel])]
+      (m/assoc-meta! outer-panel
+                     :type ::options
+                     :value-atom current-value)
+      outer-panel)))
 
 (defn scrollable [o]
   (JScrollPane. o))
@@ -171,28 +189,15 @@
 (defn open [o]
   (conf o :open true))
 
-
 (defmacro invoke-later [& body]
   `(SwingUtilities/invokeLater
     (fn []
       ~@body)))
 
-(doseq [widget-type [Component
-                     ::ask-user
-                     ::form
-                     ::grid
-                     ::horizontal
-                     ::icon
-                     ::message
-                     ::options
-                     ::rigid-area
-                     ::vertical]]
-  (derive widget-type ::swing))
-
 (derive JMenu ::menu)
 (derive JPopupMenu ::menu)
 
-(defmethod g/set [::swing :content]
+(defmethod g/set [Component :content]
   [o _ x]
   (cond ((or? sequential? nil?) x) (g/set o :children x)
         ((or? keyword? string?) x) (g/set o :text x)
@@ -230,7 +235,7 @@
   (doseq [[name panel] (partition 2 kvs)]
     (.addTab o (translate name) panel)))
 
-(defmethod g/set [JComponent :border]
+(defmethod g/set [Component :border]
   [o _ borders]
   (let [[top left bottom right] (if (number? borders)
                                   (repeat borders)
@@ -238,7 +243,7 @@
     (.setBorder o
                 (BorderFactory/createEmptyBorder top left bottom right))))
 
-(defmethod g/set [JComponent :titled-border]
+(defmethod g/set [Component :titled-border]
   [o _ text]
   (.setBorder o (BorderFactory/createTitledBorder (translate text))))
 
@@ -271,7 +276,7 @@
                               [_ evt]
                               (handler evt)))))
 
-(defmethod g/on [JComponent :action]
+(defmethod g/on [Component :action]
   [o _ handler]
   (add-action-handler o handler))
 
@@ -327,24 +332,24 @@
                  (map menu-item))]
     (.add o e)))
 
-(defmethod g/set [::swing :popup-menu]
+(defmethod g/set [Component :popup-menu]
   [o _ menu]
   (g/on o :right-click (fn [e] (.show menu
                                      (.getComponent e)
                                      (.getX e)
                                      (.getY e)))))
 
-(defmethod g/set [::swing :background]
+(defmethod g/set [Component :background]
   [o _ color]
   (when color
     (.setBackground o color)))
 
-(defmethod g/set [::swing :foreground]
+(defmethod g/set [Component :foreground]
   [o _ color]
   (when color
     (.setForeground o color)))
 
-(defmethod g/on [JComponent :popup]
+(defmethod g/on [Component :popup]
   [o _  {:keys [hide show cancel]}]
   (.addPopupMenuListener
    o
@@ -353,7 +358,7 @@
           (popupMenuWillBecomeVisible   [_ evt] (when show   (show   evt)))
           (popupMenuWillBecomeInvisible [_ evt] (when hide   (hide   evt))))))
 
-(defmethod g/on [JComponent :click]
+(defmethod g/on [Component :click]
   [o _ handler]
   (.addMouseListener
    o
@@ -361,7 +366,7 @@
      (mouseClicked [evt]
                    (handler evt)))))
 
-(defmethod g/on [JComponent :double-click]
+(defmethod g/on [Component :double-click]
   [o _ handler]
   (g/on o :click
         (fn [evt]
@@ -369,7 +374,7 @@
                    2)
             (handler evt)))))
 
-(defmethod g/on [JComponent :right-click]
+(defmethod g/on [Component :right-click]
   [o _ handler]
   (.addMouseListener
    o
@@ -381,16 +386,16 @@
                     (when (.isPopupTrigger evt)
                       (handler evt))))))
 
-(defmethod g/set [JComponent :enabled?]
+(defmethod g/set [Component :enabled?]
   [o _ enabled?]
   (.setEnabled o (boolean enabled?)))
 
-(defmethod g/set [JComponent :line-wrap]
+(defmethod g/set [Component :line-wrap]
   [o _ wrap]
   (.setLineWrap o (boolean wrap))
   (.setWrapStyleWord o (= :words wrap)))
 
-(defmethod g/set [JComponent :selected?]
+(defmethod g/set [Component :selected?]
   [o _ selected?]
   (.setSelected o (boolean selected?)))
 
@@ -457,33 +462,14 @@
   [o _ items]
   (.setListData o (to-array items)))
 
-(defmethod g/set [JComponent :icon]
-  [o _ source]
-  (.setIcon o (ImageIcon. (io/resource source))))
+(defn icon [path]
+  (if-let [res (io/resource path)]
+    (ImageIcon. res)
+    (warn "can't find icon:" path)))
 
 (defmethod g/get [::options :value]
   [o _]
   @(:value-atom (m/meta o)))
-
-(defn options [& args]
-  (with-options [[format-fn init layout content] args]
-    (let [format-fn (or format-fn translate)
-          layout    (or layout :horizontal)
-          current-value (atom init)
-          buttons       (for [i content]
-                          (g/make JRadioButton
-                                  :text (format-fn i)
-                                  :selected (= i init)
-                                  :on {:click (fn [_] (reset! current-value i))}))
-          group         (g/make ButtonGroup buttons)
-          inner-panel   (case layout
-                              :horizontal (horizontal buttons)
-                              :vertical   (vertical   buttons))
-          outer-panel   (panel [inner-panel])]
-      (m/assoc-meta! outer-panel
-                     :type ::options
-                     :value-atom current-value)
-      outer-panel)))
 
 (defmethod g/get1 ::form
   [o key]
@@ -527,9 +513,27 @@
                       :background bg
                       :foreground fg
                       :font (g/get list :font)
-                      :text (str value))
-                lbl))))))
+                      :text value)))))))
 
+(defn make-icon-renderer
+  "A list cell renderer that also shows icons"
+  [value->icon]
+  (let [lbl (label :text ""
+                   :opaque true
+                   :border 1)]
+    (reify ListCellRenderer
+           (getListCellRendererComponent
+            [_ list value index selected? focus?]
+            (conf lbl
+                  :background (if selected?
+                                (.getSelectionBackground list)
+                                (.getBackground list))
+                  :foreground (if selected?
+                                (.getSelectionForeground list)
+                                (.getForeground list))
+                  ;; :font (.getFont list)
+                  :icon (value->icon value)
+                  :text value)))))
 
 (defmethod g/set [Window :open]
   [o _ open?]
@@ -555,46 +559,69 @@
       (g/set o :open open)
       o)))
 
-(defn key-name [key-event]
-  (str (.getKeyModifiers key-event)
-       (.getKeyText key-event)))
+(defn as-action [f]
+  (proxy [AbstractAction] []
+    (actionPerformed [e] (f e))))
 
-(defn combined-key-handler [key-handlers]
-  (let [key-handled? (set (keys key-handlers))]
-    (proxy [KeyAdapter] []
-      (keyPressed
-       [key-event]
-       (let [key (key-name key-event)]
-         (when (key-handled? key)
-           ((key-handlers key) key-event)))))))
+(defn add-key-handler [win key handler]
+  (let [key-id     (->> (name key)
+                        str/upper-case
+                        (str "VK_")
+                        (static-field KeyEvent))
+        key-stroke (KeyStroke/getKeyStroke key-id 0)
+        root (.getRootPane win)]
+    (prn 1)
+    (.. root
+        (getInputMap JComponent/WHEN_IN_FOCUSED_WINDOW)
+        (put key-stroke (name key)))
+    (prn 2)
+    (.. root
+        (getActionMap)
+        (put (name key) (as-action handler)))
+    (prn 3)))
 
-(defmethod g/on [JComponent :key]
+(defmethod g/on [Component :key]
   [o _ handlers]
-  (.addKeyListener o (combined-key-handler handlers)))
+  (doseq [[key handler] handlers]
+    (add-key-handler o key handler)))
 
-(defmethod g/on [Window :key-in-child]
-  [o _ handlers]
-  (let [handler (combined-key-handler handlers)
-        rec-add (fn rec-add [component]
-                  (.addKeyListener component handler)
-                  (doseq [elt (.getComponents component)]
-                    (rec-add elt)))]
-    (rec-add (.getContentPane o))))
-
-(defmethod g/set [JComponent :min-size]
+(defmethod g/set [Component :min-size]
   [o _ [width height]]
   (.setMinimumSize o (Dimension. width height)))
 
-(defmethod g/set [JComponent :pref-size]
+(defmethod g/set [Component :pref-size]
   [o _ [width height]]
   (.setPreferredSize o (Dimension. width height)))
 
-(defmethod g/set [JComponent :max-size]
+(defmethod g/set [Component :max-size]
   [o _ [width height]]
   (.setMaximumSize o (Dimension. width height)))
 
-(defmethod g/set [JComponent :size]
+(defmethod g/set [Component :size]
   [o _ sz]
   (set-all o {:min-size  sz
               :pref-size sz
               :max-size  sz}))
+
+(defn ok-cancel-dialog [& args]
+  (with-options [[on-ok open content] args]
+    (let [d             (apply dialog args)
+          ok-button     (button :text :ok
+                                (fn [_]
+                                  (close d)
+                                  (when on-ok
+                                    (on-ok nil))))
+          cancel-button (button :text :cancel
+                                (fn [_]
+                                  (close d)))]
+      (.. d getRootPane (setDefaultButton ok-button))
+      (conf d
+            :open open
+            :on {:key {:escape (fn [_]
+                                 (doto cancel-button
+                                   .requestFocusInWindow
+                                   (.doClick 100)))}}
+            [(vertical (concat content
+                               [(horizontal [ok-button [:tag :ok]
+                                             cancel-button [:tag :cancel]])
+                                :align :center]))]))))

@@ -54,6 +54,11 @@
         (str "set-" (name slot-name))
         value))
 
+(defn static-field [class field-name]
+  (.get (.getField class
+                   (name field-name))
+        nil))
+
 (defn call-constructor [clazz & args]
   (let [constructor (->> args
                          (map class)

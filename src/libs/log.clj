@@ -1,7 +1,7 @@
 (ns libs.log
   (:require [clojure.string :as str]))
 
-(def log-levels [:error :warn :info :debug])
+(def log-levels [:error :warning :info :debug])
 
 (def log-level-index (zipmap log-levels (range (count log-levels))))
 
@@ -36,7 +36,7 @@
         (spit log-file text :append true)))))
 
 (defn warn [& args]
-  (apply log :warn args))
+  (apply log :warning args))
 
 (defn info [& args]
   (apply log :info args))

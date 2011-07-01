@@ -133,10 +133,21 @@
          JOptionPane/YES_NO_OPTION
          JOptionPane/QUESTION_MESSAGE))))
 
-(defn message [text]
-  (JOptionPane/showMessageDialog
-   nil
-   (translate text)))
+(defn message [& args]
+  (with-options [[icon title type content] args]
+    (let [type     (or type :plain)
+          msg-type (case type
+                         :error    JOptionPane/ERROR_MESSAGE
+                         :info     JOptionPane/INFORMATION_MESSAGE
+                         :warn     JOptionPane/WARNING_MESSAGE
+                         :question JOptionPane/QUESTION_MESSAGE
+                         :plain    JOptionPane/PLAIN_MESSAGE)]
+      (JOptionPane/showMessageDialog
+       nil
+       (translate content)
+       (translate title)
+       msg-type
+       icon))))
 
 (defn rigid-area [width height]
   (Box/createRigidArea (Dimension. width height)))
@@ -570,15 +581,12 @@
                         (static-field KeyEvent))
         key-stroke (KeyStroke/getKeyStroke key-id 0)
         root (.getRootPane win)]
-    (prn 1)
     (.. root
         (getInputMap JComponent/WHEN_IN_FOCUSED_WINDOW)
         (put key-stroke (name key)))
-    (prn 2)
     (.. root
         (getActionMap)
-        (put (name key) (as-action handler)))
-    (prn 3)))
+        (put (name key) (as-action handler)))))
 
 (defmethod g/on [Component :key]
   [o _ handlers]
@@ -604,13 +612,22 @@
               :max-size  sz}))
 
 (defn ok-cancel-dialog [& args]
-  (with-options [[on-ok open content] args]
+  (with-options [[content
+                  on-ok
+                  open
+                  validator] args]
     (let [d             (apply dialog args)
+          validator     (or validator
+                            (fn []))
+          on-ok         (or on-ok
+                            (fn []))
           ok-button     (button :text :ok
                                 (fn [_]
-                                  (close d)
-                                  (when on-ok
-                                    (on-ok nil))))
+                                  (if-let [error (validator)]
+                                    (message :type :error
+                                             error)
+                                    (do (close d)
+                                        (on-ok)))))
           cancel-button (button :text :cancel
                                 (fn [_]
                                   (close d)))]

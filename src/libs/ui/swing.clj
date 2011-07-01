@@ -226,7 +226,9 @@
 
 (defmethod g/set [Component :text]
   [o _ text]
-  (.setText o (translate text)))
+  (.setText o (translate text))
+  (when (translatable? (descriptive text))
+    (g/set o :tooltip (descriptive text))))
 
 (defmethod g/set [Window :text]
   [o _ text]

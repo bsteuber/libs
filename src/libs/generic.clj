@@ -28,6 +28,10 @@
 (defmulti on (fn [o key handler]
                [(m/type o) key]))
 
+(defmulti put (fn [o val]
+                [(m/type o)
+                 (m/type val)]))
+
 (defmulti config (fn [o  _]
                    (m/type o)))
 
@@ -58,6 +62,11 @@
   [o key value]
   (set1 o key value))
 
+(defmethod set [Object :args]
+  [o _ args]
+  (doseq [arg args]
+    (put o arg)))
+
 (defmethod set1 :default
   [o key value]
   (call-setter o key value))
@@ -75,7 +84,7 @@
 (defn set-all [o args]
   (let [args (if (map? args)
                args
-               (partition 2 (process-content-arg args)))]
+               (partition 2 (parse-args args)))]
     (doseq [[k v] args]
       (try (set o k v)
            (catch Exception e

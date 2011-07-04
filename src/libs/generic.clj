@@ -30,13 +30,16 @@
 
 (defmulti put (fn [o val]
                 [(m/type o)
-                 (m/type val)]))
+                 (class val)]))
 
 (defmulti config (fn [o  _]
                    (m/type o)))
 
-(defn value [x]
-  (get x :value))
+(defn value [o]
+  (get o :value))
+
+(defn set-value [o val]
+  (set o :value val))
 
 (defmethod get :default
   [o key]
@@ -62,11 +65,6 @@
   [o key value]
   (set1 o key value))
 
-(defmethod set [Object :args]
-  [o _ args]
-  (doseq [arg args]
-    (put o arg)))
-
 (defmethod set1 :default
   [o key value]
   (call-setter o key value))
@@ -90,9 +88,10 @@
            (catch Exception e
              (error "Error in generic setter:"
                     "\n  slot:       " k
-                    "\n  class:      " (class o)
+                    "\n  type:       " (m/type o)
                     "\n  value:      " v
-                    "\n  value class:" (class v))
+                    "\n  value class:" (class v)
+                    "\n  error:      " e)
              (throw e)))))
   o)
 

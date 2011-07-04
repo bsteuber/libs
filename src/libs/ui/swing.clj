@@ -1,15 +1,24 @@
 (ns libs.ui.swing
+  (:refer-clojure :exclude [get set])
   (:use (clojure.contrib miglayout)
-        (libs args log predicates translate)
-        [libs.generic :only [conf config on set-all]]
+        (libs args
+              debug
+              fn
+              generic
+              log
+              predicates
+              translate)
         (libs.java reflect))
   (:require [clojure.java.io :as io]
             [clojure.string  :as str]
-            [libs.generic    :as g]
             [libs.java.meta  :as m])
-  (:import (clojure.lang IPersistentMap Sequential)
+  (:import (clojure.lang Keyword
+                         Fn
+                         IFn
+                         IPersistentMap)
            (java.awt BorderLayout
                      Component
+                     Container
                      Dimension
                      Event
                      Window)
@@ -57,15 +66,17 @@
                               PopupMenuListener)
            (javax.swing.text JTextComponent)))
 
+(derive JMenu      ::menu)
+(derive JPopupMenu ::menu)
+
 (defn window [& args]
   (config (JFrame.) args))
 
-(defn dialog [& args]
-  (with-options [[parent] args]
-    (let [o (if parent
-              (JDialog. parent)
-              (JDialog.))]
-      (config o args))))
+(deff dialog [parent & other-args]
+  (let [o (if parent
+            (JDialog. parent)
+            (JDialog.))]
+    (config o other-args)))
 
 (defn button [& args]
   (config (JButton.) args))
@@ -110,22 +121,20 @@
   (config (JPasswordField. 15) args))
 
 (defn layout [elements]
-  (apply miglayout (panel) elements))
+  (apply miglayout (JPanel.) elements))
 
-(defn horizontal [& args]
-  (with-options [[content] args]
-    (layout content)))
+(deff horizontal [args]
+  (layout args))
 
-(defn vertical [& args]
-  (with-options [[content] args]
-    (layout (list* :layout
-                   :flowy
-                   content))))
+(deff vertical [args]
+  (layout (list* :layout
+                 :flowy
+                 args)))
 
-(defn ask-user
-  ([text] (ask-user :Question text))
-  ([title text]
-     (= JOptionPane/YES_OPTION
+(deff ask-user [title args]
+  (let [title  (or title :question)
+        [text] args]
+    (= JOptionPane/YES_OPTION
         (JOptionPane/showConfirmDialog
          nil
          (translate text)
@@ -133,63 +142,61 @@
          JOptionPane/YES_NO_OPTION
          JOptionPane/QUESTION_MESSAGE))))
 
-(defn message [& args]
-  (with-options [[icon title type content] args]
-    (let [type     (or type :plain)
-          msg-type (case type
-                         :error    JOptionPane/ERROR_MESSAGE
-                         :info     JOptionPane/INFORMATION_MESSAGE
-                         :warn     JOptionPane/WARNING_MESSAGE
-                         :question JOptionPane/QUESTION_MESSAGE
-                         :plain    JOptionPane/PLAIN_MESSAGE)]
-      (JOptionPane/showMessageDialog
-       nil
-       (translate content)
-       (translate title)
-       msg-type
-       icon))))
+(deff message [icon title type args]
+  (let [type     (or type :plain)
+        [text]   args
+        msg-type (case type
+                       :error    JOptionPane/ERROR_MESSAGE
+                       :info     JOptionPane/INFORMATION_MESSAGE
+                       :warn     JOptionPane/WARNING_MESSAGE
+                       :question JOptionPane/QUESTION_MESSAGE
+                       :plain    JOptionPane/PLAIN_MESSAGE)]
+    (JOptionPane/showMessageDialog
+     nil
+     (translate text)
+     (translate title)
+     msg-type
+     icon)))
 
-(defn rigid-area [width height]
-  (Box/createRigidArea (Dimension. width height)))
+(deff rigid-area [args]
+  (let [[width height] args]
+    (Box/createRigidArea (Dimension. width height))))
 
-(defn grid [& args]
-  (with-options [[columns content] args]
-    (layout (list* :layout [:wrap columns] content))))
+(deff grid [columns args]
+  (layout (list* :layout [:wrap columns] args)))
 
-(defn form [& args]
-  (with-options [[content] args]
-    (let [form (->> content
-                    (partition 2)
-                    (mapcat (fn [[k v]]
-                              [(label k)
-                               v]))
-                    (list* :column "[]20[]")
-                    (grid :columns 2))]
-      (m/assoc-meta! form
-                     :type         ::form
-                     :form-mapping (apply hash-map content))
-      form)))
+(deff form [args]
+  (let [form (->> args
+                  (partition 2)
+                  (mapcat (fn [[k v]]
+                            [(label k)
+                             v]))
+                  (list* :column "[]20[]")
+                  (grid :columns 2))]
+    (m/assoc-meta! form
+                   :type         ::form
+                   :form-mapping (apply hash-map args))
+    form))
 
-(defn options [& args]
-  (with-options [[format-fn init layout content] args]
-    (let [format-fn (or format-fn translate)
-          layout    (or layout :horizontal)
-          current-value (atom init)
-          buttons       (for [i content]
-                          (g/conf (JRadioButton.)
-                                  :text (format-fn i)
-                                  :selected (= i init)
-                                  :on {:click (fn [_] (reset! current-value i))}))
-          group         (g/make ButtonGroup buttons)
-          inner-panel   (case layout
-                              :horizontal (horizontal (list* :layout "ins 0"
-                                                             buttons))
-                              :vertical   (vertical   buttons))
-          outer-panel   (panel [inner-panel])]
-      (m/assoc-meta! outer-panel
-                     :type ::options
-                     :value-atom current-value)
-      outer-panel)))
+(deff options [format-fn init layout args]
+  (let [format-fn     (or format-fn translate)
+        layout        (or layout :horizontal)
+        current-value (atom init)
+        buttons       (for [o args]
+                        (conf (JRadioButton.)
+                                :text (format-fn o)
+                                :selected (= o init)
+                                :on {:click #(reset! current-value o)}))
+        group         (make ButtonGroup buttons)
+        inner-panel   (case layout
+                            :horizontal (horizontal (list* :layout "ins 0"
+                                                           buttons))
+                            :vertical   (vertical buttons))
+        outer-panel   (panel inner-panel)]
+    (m/assoc-meta! outer-panel
+                   :type ::options
+                   :value-atom current-value)
+    outer-panel))
 
 (defn scrollable [o]
   (JScrollPane. o))
@@ -205,50 +212,59 @@
     (fn []
       ~@body)))
 
-(derive JMenu ::menu)
-(derive JPopupMenu ::menu)
+(defmethod set [Object :args]
+  [o _ args]
+  (doseq [arg args]
+    (put o arg)))
 
-(defmethod g/set [Component :content]
-  [o _ x]
-  (cond ((or? sequential? nil?) x) (g/set o :children x)
-        ((or? keyword? string?) x) (g/set o :text x)
-        (ifn? x)                   (on o :action x)
-        :else                      (g/set o :value x)))
+(defmethod put [Component Object]
+  [o val]
+  (set o :value val))
 
-(defmethod g/set [ButtonGroup :content]
-  [o _ buttons]
-  (doseq [b buttons]
-    (.add o b)))
+(defmethod put [Container Component]
+  [o inner]
+  (.add o inner))
 
-(defmethod g/set [Component :title]
+(defmethod put [ButtonGroup Component]
+  [o inner]
+  (.add o inner))
+
+(defmethod put [Component String]
+  [o text]
+  (set o :text text))
+
+(defmethod put [Component Keyword]
+  [o text]
+  (set o :text text))
+
+(defmethod put [Component Fn]
+  [o f]
+  (on o :action f))
+
+(defmethod set [Component :title]
   [o _ text]
   (.setTitle o (translate text)))
 
-(defmethod g/set [Component :text]
+(defmethod set [Component :text]
   [o _ text]
   (.setText o (translate text))
   (when (translatable? (descriptive text))
-    (g/set o :tooltip (descriptive text))))
+    (set o :tooltip (descriptive text))))
 
-(defmethod g/set [Window :text]
+(defmethod set [Window :text]
   [o _ text]
   (.setTitle o (translate text)))
 
-(defmethod g/set [Component :tooltip]
+(defmethod set [Component :tooltip]
   [o _ tooltip]
   (.setToolTipText o (translate tooltip)))
 
-(defmethod g/set [Component :children]
-  [o _ children]
-  (doseq [child children]
-    (.add o child)))
-
-(defmethod g/set [JTabbedPane :children]
+(defmethod set [JTabbedPane :args]
   [o _ kvs]
   (doseq [[name panel] (partition 2 kvs)]
     (.addTab o (translate name) panel)))
 
-(defmethod g/set [Component :border]
+(defmethod set [Component :border]
   [o _ borders]
   (let [[top left bottom right] (if (number? borders)
                                   (repeat borders)
@@ -256,29 +272,29 @@
     (.setBorder o
                 (BorderFactory/createEmptyBorder top left bottom right))))
 
-(defmethod g/set [Component :titled-border]
+(defmethod set [Component :titled-border]
   [o _ text]
   (.setBorder o (BorderFactory/createTitledBorder (translate text))))
 
-(defmethod g/set [JSplitPane :orientation]
+(defmethod set [JSplitPane :orientation]
   [o _ orientation]
   (.setOrientation o (case orientation
                            :vertical   JSplitPane/VERTICAL_SPLIT
                            :horizontal JSplitPane/HORIZONTAL_SPLIT)))
 
-(defmethod g/set [JSplitPane :top]
+(defmethod set [JSplitPane :top]
   [o _ elt]
   (.setTopComponent o elt))
 
-(defmethod g/set [JSplitPane :bottom]
+(defmethod set [JSplitPane :bottom]
   [o _ elt]
   (.setBottomComponent o elt))
 
-(defmethod g/set [JSplitPane :left]
+(defmethod set [JSplitPane :left]
   [o _ elt]
   (.setLeftComponent o elt))
 
-(defmethod g/set [JSplitPane :right]
+(defmethod set [JSplitPane :right]
   [o _ elt]
   (.setRightComponent o elt))
 
@@ -289,134 +305,141 @@
                               [_ evt]
                               (handler evt)))))
 
-(defmethod g/on [Component :action]
+(defmethod on [Component :action]
   [o _ handler]
-  (add-action-handler o handler))
+  (add-action-handler o (as-handler handler)))
 
-(defmethod g/get [JTextComponent :value]
+(defmethod get [JTextComponent :value]
   [o _]
   (.getText o))
 
-(defmethod g/set [JTextComponent :value]
+(defmethod set [JTextComponent :value]
   [o _ val]
   (.setText o val))
 
-(defmethod g/set [JCheckBox :value]
+(defmethod set [JCheckBox :value]
   [o _ val]
   (.setSelected o val))
 
-(defmethod g/get [JCheckBox :value]
+(defmethod get [JCheckBox :value]
   [o _]
   (.isSelected o val))
 
-(defmethod g/on [JTextComponent :change]
+(defmethod on [JTextComponent :change]
   [o _ handler]
-  (.. o
-      getDocument
-      (addDocumentListener
-       (reify DocumentListener
-              (changedUpdate
-               [_ evt]
-               (handler evt))
-              (insertUpdate
-               [_ evt]
-               (handler evt))
-              (removeUpdate
-               [_ evt]
-               (handler evt))))))
 
-(defmethod g/on [JList :change]
+  (with-handlers [handler]
+    (.. o
+        getDocument
+        (addDocumentListener
+         (reify DocumentListener
+                (changedUpdate
+                 [_ evt]
+                 (handler evt))
+                (insertUpdate
+                 [_ evt]
+                 (handler evt))
+                (removeUpdate
+                 [_ evt]
+                 (handler evt)))))))
+
+(defmethod on [JList :change]
   [o _ handler]
-  (.addListSelectionListener
-   o
-   (reify ListSelectionListener
-          (valueChanged [_ evt]
-                        (handler evt)))))
+  (with-handlers [handler]
+    (.addListSelectionListener
+     o
+     (reify ListSelectionListener
+            (valueChanged [_ evt]
+                          (handler evt))))))
 
 (defn menu-item [text handler]
-  (g/make JMenuItem
+  (make JMenuItem
         :text text
-        handler))
+        (as-handler handler)))
 
-(defmethod g/set [::menu :children]
+(defmethod set [::menu :args]
   [o _ entries]
   (doseq [e (->> entries
                  (partition 2)
-                 (map menu-item))]
+                 (map #(apply menu-item %)))]
     (.add o e)))
 
-(defmethod g/set [Component :popup-menu]
+(defmethod set [Component :popup-menu]
   [o _ menu]
-  (g/on o :right-click (fn [e] (.show menu
-                                     (.getComponent e)
-                                     (.getX e)
-                                     (.getY e)))))
+  (on o :right-click (fn [e] (.show menu
+                                    (.getComponent e)
+                                    (.getX e)
+                                    (.getY e)))))
 
-(defmethod g/set [Component :background]
+(defmethod set [Component :background]
   [o _ color]
   (when color
     (.setBackground o color)))
 
-(defmethod g/set [Component :foreground]
+(defmethod set [Component :foreground]
   [o _ color]
   (when color
     (.setForeground o color)))
 
-(defmethod g/on [Component :popup]
+(defmethod on [Component :popup]
   [o _  {:keys [hide show cancel]}]
-  (.addPopupMenuListener
-   o
-   (reify PopupMenuListener
-          (popupMenuCanceled            [_ evt] (when cancel (cancel evt)))
-          (popupMenuWillBecomeVisible   [_ evt] (when show   (show   evt)))
-          (popupMenuWillBecomeInvisible [_ evt] (when hide   (hide   evt))))))
+  (with-handlers [hide show cancel]
+    (.addPopupMenuListener
+     o
+     (reify PopupMenuListener
+            (popupMenuCanceled            [_ evt] (when cancel (cancel evt)))
+            (popupMenuWillBecomeVisible   [_ evt] (when show   (show   evt)))
+            (popupMenuWillBecomeInvisible [_ evt] (when hide   (hide   evt)))))))
 
-(defmethod g/on [Component :click]
+(defmethod on [Component :click]
   [o _ handler]
-  (.addMouseListener
-   o
-   (proxy [MouseAdapter] []
-     (mouseClicked [evt]
-                   (handler evt)))))
+  (with-handlers [handler]
+    (.addMouseListener
+     o
+     (proxy [MouseAdapter] []
+       (mouseClicked [evt]
+                     (handler evt))))))
 
-(defmethod g/on [Component :double-click]
+(defmethod on [Component :double-click]
   [o _ handler]
-  (g/on o :click
+  (with-handlers [handler]
+    (on o :click
         (fn [evt]
           (when (= (.getClickCount evt)
                    2)
-            (handler evt)))))
+            (handler evt))))))
 
-(defmethod g/on [Component :right-click]
+(defmethod on [Component :right-click]
   [o _ handler]
-  (.addMouseListener
-   o
-   (proxy [MouseAdapter] []
-     (mousePressed [evt]
-                   (when (.isPopupTrigger evt)
-                     (handler evt)))
-     (mouseReleased [evt]
-                    (when (.isPopupTrigger evt)
-                      (handler evt))))))
+  (with-handlers [handler]
+    (.addMouseListener
+     o
+     (proxy [MouseAdapter] []
+       (mousePressed [evt]
+                     (when (.isPopupTrigger evt)
+                       (handler evt)))
+       (mouseReleased [evt]
+                      (when (.isPopupTrigger evt)
+                        (handler evt)))))))
 
-(defmethod g/set [Component :enabled?]
+(defmethod set [Component :enabled?]
   [o _ enabled?]
   (.setEnabled o (boolean enabled?)))
 
-(defmethod g/set [Component :line-wrap]
+(defmethod set [Component :line-wrap]
   [o _ wrap]
   (.setLineWrap o (boolean wrap))
   (.setWrapStyleWord o (= :words wrap)))
 
-(defmethod g/set [Component :selected?]
+(defmethod set [Component :selected?]
   [o _ selected?]
   (.setSelected o (boolean selected?)))
 
-(defmethod g/get [Object :enabled?]
+(defmethod get [Object :enabled?]
   [_ _]
   false)
 
-(defmethod g/get [nil :enabled?]
+(defmethod get [nil :enabled?]
   [_ _]
   false)
 
@@ -424,45 +447,64 @@
 ;; when changing items or value programmatically
 (def disabled-combo-boxes (atom #{}))
 
-(defmethod g/on [JComboBox :action]
+(defmethod on [JComboBox :action]
   [o _ handler]
-  (add-action-handler
-   o
-   #(when-not (@disabled-combo-boxes o)
-      (handler %))))
+  (with-handlers [handler]
+    (add-action-handler
+     o
+     #(when-not (@disabled-combo-boxes o)
+        (handler %)))))
 
-(defmethod g/get [JComboBox :value]
+(defmethod get [JComboBox :value]
   [o _]
   (.getSelectedItem o))
 
-(defmethod g/get [JList :value]
+(defmethod get [JList :value]
   [o _]
   (.getSelectedValue o))
 
-(defmethod g/get [JList :values]
+(defmethod get [JList :values]
   [o _]
   (.getSelectedValues o))
 
-(defmethod g/set [JComboBox :value]
+(defmethod set [JComboBox :value]
   [o _ value]
   (swap! disabled-combo-boxes conj o)
   (.setSelectedItem o value)
   (swap! disabled-combo-boxes disj o))
 
-(defmethod g/set [JList :value]
+(defmethod set [JList :value]
   [o _ value]
   (.setSelectedValue o value true))
 
 (derive JList ::list)
 (derive JComboBox ::list)
 
-(defmethod g/get [::list :children]
+(defmethod get [::list :items]
   [o _]
   (let [model (.getModel o)]
     (doall (for [i (range (.getSize model))]
              (.getElementAt model i)))))
 
-(defmethod g/set [JComboBox :children]
+(defmethod put [JComboBox Object]
+  [o val]
+  (swap! disabled-combo-boxes conj o)
+  (.addItem o val)
+  (swap! disabled-combo-boxes disj o))
+
+(prefer-method put
+               [JComboBox Object]
+               [Component String])
+
+(prefer-method put
+               [JComboBox Object]
+               [Component Keyword])
+
+(prefer-method put
+               [Component Fn]
+               [JComboBox Object])
+
+(defmethod set [JComboBox :items]
   [o _ items]
   (swap! disabled-combo-boxes conj o)
   (.removeAllItems o)
@@ -471,7 +513,7 @@
   (.setSelectedIndex o 0)
   (swap! disabled-combo-boxes disj o))
 
-(defmethod g/set [JList :children]
+(defmethod set [JList :items]
   [o _ items]
   (.setListData o (to-array items)))
 
@@ -480,19 +522,19 @@
     (ImageIcon. res)
     (warn "can't find icon:" path)))
 
-(defmethod g/get [::options :value]
+(defmethod get [::options :value]
   [o _]
   @(:value-atom (m/meta o)))
 
-(defmethod g/get1 ::form
+(defmethod get1 ::form
   [o key]
   (-> o
       m/meta
       :form-mapping
       key
-      (g/get :value)))
+      (get :value)))
 
-(defmethod g/get [::form :value]
+(defmethod get [::form :value]
   [o _]
   (let [m (:form-mapping (m/meta o))]
     (zipmap (keys m)
@@ -514,7 +556,7 @@
             [_ list value index selected? focus?]
             (if (= value :separator)
               (JSeparator. JSeparator/HORIZONTAL)
-              (let [[bg fg] (if-not (g/get value :enabled?)
+              (let [[bg fg] (if-not (get value :enabled?)
                               [(.getBackground list)
                                (get-ui-color "Label.disabledForeground")]
                               (if selected?
@@ -525,18 +567,18 @@
                 (conf lbl
                       :background bg
                       :foreground fg
-                      :font (g/get list :font)
+                      :font (get list :font)
                       :text value)))))))
 
 (defn make-icon-renderer
   "A list cell renderer that also shows icons"
   [value->icon]
-  (let [lbl (label :text ""
+  (let [lbl (label ""
                    :opaque true
                    :border 1)]
     (reify ListCellRenderer
            (getListCellRendererComponent
-            [_ list value index selected? focus?]
+            [_ list val index selected? focus?]
             (conf lbl
                   :background (if selected?
                                 (.getSelectionBackground list)
@@ -545,102 +587,88 @@
                                 (.getSelectionForeground list)
                                 (.getForeground list))
                   ;; :font (.getFont list)
-                  :icon (value->icon value)
-                  :text value)))))
+                  :icon (value->icon val)
+                  :text val)))))
 
-(defmethod g/set [Window :open]
+(defmethod set [Window :open]
   [o _ open?]
   (when open?
     (.pack o)
     (.setVisible o true)))
 
-(defmethod g/set [Window :close]
+(defmethod set [Window :close]
   [o _ close?]
   (when close?
     (.setVisible o false)
     (.dispose o)))
 
-(defmethod g/on [Window :closing]
+(defmethod on [Window :closing]
   [o _ handler]
-  (.addWindowListener o (proxy [WindowAdapter] []
-                            (windowClosing [evt] (handler evt)))))
-
-(defmethod config Window
-  [o args]
-  (with-options [[open] args]
-    (let [o (set-all o args)]
-      (g/set o :open open)
-      o)))
+  (with-handlers [handler]
+    (.addWindowListener o (proxy [WindowAdapter] []
+                            (windowClosing [evt] (handler evt))))))
 
 (defn as-action [f]
   (proxy [AbstractAction] []
     (actionPerformed [e] (f e))))
 
 (defn add-key-handler [win key handler]
-  (let [key-id     (->> (name key)
-                        str/upper-case
-                        (str "VK_")
-                        (static-field KeyEvent))
-        key-stroke (KeyStroke/getKeyStroke key-id 0)
-        root (.getRootPane win)]
-    (.. root
-        (getInputMap JComponent/WHEN_IN_FOCUSED_WINDOW)
-        (put key-stroke (name key)))
-    (.. root
-        (getActionMap)
-        (put (name key) (as-action handler)))))
+  (with-handlers [handler]
+    (let [key-id     (->> (name key)
+                          str/upper-case
+                          (str "VK_")
+                          (static-field KeyEvent))
+          key-stroke (KeyStroke/getKeyStroke key-id 0)
+          root (.getRootPane win)]
+      (.. root
+          (getInputMap JComponent/WHEN_IN_FOCUSED_WINDOW)
+          (put key-stroke (name key)))
+      (.. root
+          (getActionMap)
+          (put (name key) (as-action handler))))))
 
-(defmethod g/on [Component :key]
+(defmethod on [Component :key]
   [o _ handlers]
   (doseq [[key handler] handlers]
     (add-key-handler o key handler)))
 
-(defmethod g/set [Component :min-size]
+(defmethod set [Component :min-size]
   [o _ [width height]]
   (.setMinimumSize o (Dimension. width height)))
 
-(defmethod g/set [Component :pref-size]
+(defmethod set [Component :pref-size]
   [o _ [width height]]
   (.setPreferredSize o (Dimension. width height)))
 
-(defmethod g/set [Component :max-size]
+(defmethod set [Component :max-size]
   [o _ [width height]]
   (.setMaximumSize o (Dimension. width height)))
 
-(defmethod g/set [Component :size]
+(defmethod set [Component :size]
   [o _ sz]
   (set-all o {:min-size  sz
               :pref-size sz
               :max-size  sz}))
 
-(defn ok-cancel-dialog [& args]
-  (with-options [[content
-                  on-ok
-                  open
-                  validator] args]
-    (let [d             (apply dialog args)
-          validator     (or validator
-                            (fn []))
-          on-ok         (or on-ok
-                            (fn []))
-          ok-button     (button :text :ok
-                                (fn [_]
-                                  (if-let [error (validator)]
-                                    (message :type :error
-                                             error)
-                                    (do (close d)
-                                        (on-ok)))))
-          cancel-button (button :text :cancel
-                                (fn [_]
-                                  (close d)))]
-      (.. d getRootPane (setDefaultButton ok-button))
-      (conf d
-            :open open
-            :on {:key {:escape (fn [_]
-                                 (doto cancel-button
-                                   .requestFocusInWindow
-                                   (.doClick 100)))}}
-            [(vertical (concat content
-                               [(horizontal [ok-button [:tag :ok]
-                                             cancel-button [:tag :cancel]])
-                                :align :center]))]))))
+(deff ok-cancel-dialog [args on-ok open validator & other-args]
+  (let [d             (apply dialog other-args)
+        validator     (or validator (fn []))
+        on-ok         (or on-ok (fn []))
+        ok-button     (button #(if-let [error (validator)]
+                                 (message :type :error
+                                          error)
+                                 (do (close d)
+                                     (on-ok)))
+                              :ok)
+        cancel-button (button #(close d)
+                              :cancel)]
+    (.. d getRootPane (setDefaultButton ok-button))
+    (conf d
+          :on {:key {:escape #(doto cancel-button
+                                .requestFocusInWindow
+                                (.doClick 100))}}
+          (vertical (concat args
+                            [(horizontal [ok-button [:tag :ok]
+                                          cancel-button [:tag :cancel]])
+                             :align :center]))
+          :open open)))

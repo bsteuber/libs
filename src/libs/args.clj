@@ -49,17 +49,43 @@
       (parse-args [:a 1 [:x :y] :z 6]) => [:a 1 :args [:x :y] :z 6])
 
 (defn parse-options [option-keys args]
-  (let [paired-args (partition 2 args)
-        keys        (into #{} option-keys)
-        take?       (first? keys)
-        options     (apply hash-map
-                           (apply concat
-                                  (filter take? paired-args)))
-        other-args  (apply concat (remove take? paired-args))]
-    [options other-args]))
+  (let [take-key? (into #{} option-keys)]
+    (loop [remaining-args args
+           options        {}
+           unread-args    []]
+      (if-not (seq remaining-args)
+        [options unread-args]
+        (let [[key val & more] remaining-args]
+          (if (and (take-key? key)
+                   (not (contains? options key)))
+            (recur more (assoc options key val) unread-args)
+            (recur more options (conj unread-args key val))))))))
 
-(defmacro with-options [[keys args-sym] & body]
-  `(let [[{:keys ~keys}
-          ~args-sym] (parse-options ~(vec (map keyword keys))
-                                    (parse-args ~args-sym))]
-     ~@body))
+(fact (parse-options [:a :b] [])               => [{} []])
+(fact (parse-options [:a :c] [:a 1 :b 2 :a 3]) => [{:a 1} [:b 2 :a 3]])
+
+;; TODO docstring etc.
+(defmacro deff
+  "Defines a function with flexible keyword argument parsing"
+  [name args & body]
+  (let [[and-sym rest-args-sym] (take-last 2 args)
+        [key-args rest-args-sym] (if (= and-sym '&)
+                                   [(drop-last 2 args) rest-args-sym]
+                                   [args               (gensym)])]
+    `(defn ~name [& args#]
+       (let [[{:keys ~key-args}
+              ~rest-args-sym] (parse-options
+                               ~(vec (map keyword key-args))
+                               (parse-args args#))]
+         ~@body))))
+
+(deff deff-tester [title text args & other-args]
+  (let [[x y] args]
+    [title text x y other-args]))
+
+(fact (deff-tester)                     => [nil nil nil nil []]
+      (deff-tester 5)                   => [nil nil 5 nil []]
+      (deff-tester 4 5)                 => [nil nil 4 5 []]
+      (deff-tester :title :foo)         => [:foo nil nil nil []]
+      (deff-tester :text :bar)          => [nil :bar nil nil []]
+      (deff-tester 4 5 :title :baz 6 7) => [:baz nil 4 5 [:args [6 7]]])

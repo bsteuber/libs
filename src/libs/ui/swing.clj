@@ -55,15 +55,21 @@
                         JScrollPane
                         JSplitPane
                         JTabbedPane
+                        JTable
                         JTextArea
                         JTextField
                         KeyStroke
                         ListCellRenderer
+                        ListSelectionModel
+                        RowSorter$SortKey
+                        RowFilter
+                        SortOrder
                         SwingUtilities
                         UIManager)
            (javax.swing.event DocumentListener
                               ListSelectionListener
                               PopupMenuListener)
+           (javax.swing.table AbstractTableModel)
            (javax.swing.text JTextComponent)))
 
 (derive JMenu      ::menu)
@@ -672,3 +678,135 @@
                                           cancel-button [:tag :cancel]])
                              :align :center]))
           :open open)))
+
+;;; Tables
+
+(defprotocol TableData
+  (ijth [this i j] "Returns entry from ith row, jth column")
+  (add-row [this row])
+  (remove-row [this row]))
+
+(defn make-row-model [data-ref column-model]
+  (proxy [AbstractTableModel libs.ui.swing.TableData] []
+         (add-row [row] (swap! data-ref conj row))
+         (remove-row [row] (swap! data-ref #(remove #{row} %)))
+         (ijth [i j]
+               (let [key (:key (column-model j))]
+                 (key (nth @data-ref i))))
+         (getRowCount
+          []
+          (count @data-ref))
+         (getColumnName
+          [col]
+          (:caption (column-model col)))
+         (getColumnCount
+          []
+          (count column-model))
+         (getColumnClass
+          [col]
+          (:class (column-model col)))
+         (getValueAt
+          [row col]
+          (ijth this row col))))
+
+(defn make-keyed-model [data-ref column-model p-key]
+  (proxy [AbstractTableModel libs.ui.swing.TableData] []
+         (add-row [row] (swap! data-ref assoc (p-key row) row))
+         (remove-row [row] (swap! data-ref dissoc (p-key row)))
+         (ijth [i j]
+               (let [key (:key (column-model j))]
+                 (key (nth (vals @data-ref) i))))
+         (getRowCount
+          []
+          (count @data-ref))
+         (getColumnName
+          [col]
+          (:caption (column-model col)))
+         (getColumnCount
+          []
+          (count column-model))
+         (getColumnClass
+          [col]
+          (:class (column-model col)))
+         (getValueAt
+          [row col]
+          (ijth this row col))))
+
+(defn set-sort-keys [table column-model sort-keys]
+  (let [key->id (into {}
+                      (map-indexed (fn [id model]
+                                     [(:key model) id])
+                                   column-model))]
+    (.. table
+        getRowSorter
+        (setSortKeys (for [key sort-keys]
+                       (RowSorter$SortKey. (key->id key)
+                                           SortOrder/ASCENDING))))))
+
+(defn set-regex-filter [table regex]
+  (try
+    (.. table
+        getRowSorter
+        (setRowFilter (RowFilter/regexFilter regex 0)))
+    (catch java.util.regex.PatternSyntaxException e)))
+
+(defn table [column-model data-ref & {:keys [sort-keys
+                                              on-right-click
+                                              on-double-click]}]
+  (let [model (make-row-model data-ref column-model)
+        table (doto (JTable. model)
+                (.setShowVerticalLines false)
+                (.setShowHorizontalLines false)
+                (.setAutoCreateRowSorter true)
+                (.setSelectionMode ListSelectionModel/SINGLE_SELECTION))
+        scroll-pane (JScrollPane. table)
+        find-row (fn [mouse-event]
+                   (->> mouse-event
+                        .getPoint
+                        (.rowAtPoint table)
+                        (.convertRowIndexToModel table)
+                        (nth @data-ref)))]
+
+    (dorun (map-indexed (fn [col col-model]
+                          (when-let [width (:width col-model)]
+                            (.. table
+                                getColumnModel
+                                (getColumn col)
+                                (setPreferredWidth width))))
+                        column-model))
+    #_(add-handler data-ref (fn [_ _] (.fireTableDataChanged model)))
+    (when sort-keys
+      (set-sort-keys table column-model sort-keys))
+    (when on-double-click
+      (on table :double-click (fn [evt]
+                                (on-double-click (find-row evt)))))
+    (when on-right-click
+      (on table :right-click (fn [evt]
+                               (on-right-click (find-row evt)))))
+    scroll-pane))
+
+(def test-data
+    (atom (for [i (range 100)]
+            {:name (str "Ahamay" (- 100 i))
+             :rank (str (inc (rand-int 23)) "k")})))
+
+  (def test-columns
+    [{:key :name, :caption "Name"       , :class String, :width 70}
+     {:key :rank, :caption "Spielstärke", :class String, :width 30}])
+
+  (def test-sort-keys
+    [:rank :name])
+
+  (defn show-player-info []
+    (println "player info"))
+
+  (defn test-it []
+    (let [f (JFrame.)
+          t (table test-columns test-data
+                   :sort-keys test-sort-keys
+                   :on-right-click #(println "right" %)
+                   :on-double-click #(println "double" %))]
+      (doto f
+        (.add t)
+        .pack
+        (.setVisible true))))

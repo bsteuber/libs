@@ -1,6 +1,5 @@
 (ns libs.fn
-  (:use (midje sweet)
-        (libs debug)))
+  (:use (libs debug)))
 
 (defn funcall [f arg]
   (f arg))
@@ -40,18 +39,9 @@
                                  (fail "Handler function" f
                                        "doesn't accept 0 or 1 args")))))))))
 
-(fact ((as-handler #(+ 1 1)) 42) => 2
-      ((as-handler #(+ 1 %)) 42) => 43)
-
-
 (defmacro with-handlers [handlers & body]
   `(let [~@(->> handlers
                 (map (fn [h]
                        (list h `(as-handler ~h))))
                 (apply concat))]
      ~@body))
-
-(fact (let [h #(+ 1 1)
-            i #(+ 1 %)]
-        (with-handlers [h i]
-          [(h 42) (i 42)])) => [2 43])

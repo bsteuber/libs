@@ -69,7 +69,8 @@
            (javax.swing.event DocumentListener
                               ListSelectionListener
                               PopupMenuListener)
-           (javax.swing.table AbstractTableModel)
+           (javax.swing.table AbstractTableModel
+                              DefaultTableModel)
            (javax.swing.text JTextComponent)))
 
 (derive JMenu      ::menu)
@@ -321,7 +322,11 @@
 
 (defmethod set [JTextComponent :value]
   [o _ val]
-  (.setText o val))
+  (.setText o (str val)))
+
+(defmethod set [JTextComponent :args]
+  [o _ [val]]
+  (set o :text val))
 
 (defmethod set [JCheckBox :value]
   [o _ val]
@@ -679,58 +684,29 @@
                              :align :center]))
           :open open)))
 
-;;; Tables
-
-(defprotocol TableData
-  (ijth [this i j] "Returns entry from ith row, jth column")
-  (add-row [this row])
-  (remove-row [this row]))
-
-(defn make-row-model [data-ref column-model]
-  (proxy [AbstractTableModel libs.ui.swing.TableData] []
-         (add-row [row] (swap! data-ref conj row))
-         (remove-row [row] (swap! data-ref #(remove #{row} %)))
-         (ijth [i j]
-               (let [key (:key (column-model j))]
-                 (key (nth @data-ref i))))
-         (getRowCount
-          []
-          (count @data-ref))
-         (getColumnName
-          [col]
-          (:caption (column-model col)))
-         (getColumnCount
-          []
-          (count column-model))
-         (getColumnClass
-          [col]
-          (:class (column-model col)))
-         (getValueAt
-          [row col]
-          (ijth this row col))))
-
-(defn make-keyed-model [data-ref column-model p-key]
-  (proxy [AbstractTableModel libs.ui.swing.TableData] []
-         (add-row [row] (swap! data-ref assoc (p-key row) row))
-         (remove-row [row] (swap! data-ref dissoc (p-key row)))
-         (ijth [i j]
-               (let [key (:key (column-model j))]
-                 (key (nth (vals @data-ref) i))))
-         (getRowCount
-          []
-          (count @data-ref))
-         (getColumnName
-          [col]
-          (:caption (column-model col)))
-         (getColumnCount
-          []
-          (count column-model))
-         (getColumnClass
-          [col]
-          (:class (column-model col)))
-         (getValueAt
-          [row col]
-          (ijth this row col))))
+(defn make-row-model [data-ref column-model p-key]
+  (proxy [AbstractTableModel] []
+    (getRowCount
+      []
+      (try (count @data-ref)
+           (catch Exception e (error e))))
+    (getColumnName
+      [col]
+      (try (:caption (column-model col))
+           (catch Exception e (error e))))
+    (getColumnCount
+      []
+      (try (count column-model)
+           (catch Exception e (error e))))
+    (getColumnClass
+      [col]
+      (try (:class (column-model col))
+           (catch Exception e (error e))))
+    (getValueAt
+      [row col]
+      (try (let [key (:key (column-model col))]
+             (key (nth (vals @data-ref) row)))
+           (catch Exception e (error e))))))
 
 (defn set-sort-keys [table column-model sort-keys]
   (let [key->id (into {}
@@ -750,63 +726,42 @@
         (setRowFilter (RowFilter/regexFilter regex 0)))
     (catch java.util.regex.PatternSyntaxException e)))
 
-(defn table [column-model data-ref & {:keys [sort-keys
-                                              on-right-click
-                                              on-double-click]}]
-  (let [model (make-row-model data-ref column-model)
-        table (doto (JTable. model)
+(defn table [& {:keys [columns
+                       primary-key
+                       data
+                       sort-keys
+                       on-right-click
+                       on-double-click]}]
+  (let [row-model   (make-row-model data columns primary-key)
+        table (doto (JTable. row-model)
                 (.setShowVerticalLines false)
                 (.setShowHorizontalLines false)
                 (.setAutoCreateRowSorter true)
+                (.setFillsViewportHeight true)
                 (.setSelectionMode ListSelectionModel/SINGLE_SELECTION))
         scroll-pane (JScrollPane. table)
-        find-row (fn [mouse-event]
-                   (->> mouse-event
-                        .getPoint
-                        (.rowAtPoint table)
-                        (.convertRowIndexToModel table)
-                        (nth @data-ref)))]
+        ;; find-row-id (fn [mouse-event]
+        ;;            (->> mouse-event
+        ;;                 .getPoint
+        ;;                 (.rowAtPoint table)
+        ;;                 (.convertRowIndexToModel table)
+        ;;                 (nth (keys @data))))
+        ]
 
-    (dorun (map-indexed (fn [col col-model]
-                          (when-let [width (:width col-model)]
-                            (.. table
-                                getColumnModel
-                                (getColumn col)
-                                (setPreferredWidth width))))
-                        column-model))
-    #_(add-handler data-ref (fn [_ _] (.fireTableDataChanged model)))
-    (when sort-keys
-      (set-sort-keys table column-model sort-keys))
-    (when on-double-click
-      (on table :double-click (fn [evt]
-                                (on-double-click (find-row evt)))))
-    (when on-right-click
-      (on table :right-click (fn [evt]
-                               (on-right-click (find-row evt)))))
+    ;; (dorun (map-indexed (fn [col col-model]
+    ;;                       (when-let [width (:width col-model)]
+    ;;                         (.. table
+    ;;                             getColumnModel
+    ;;                             (getColumn col)
+    ;;                             (setPreferredWidth width))))
+    ;;                     columns))
+    (add-watch data ::table (fn [_ _ _ _] (.fireTableDataChanged row-model)))
+    ;; (when sort-keys
+    ;;   (set-sort-keys table columns sort-keys))
+    ;; (when on-double-click
+    ;;   (on table :double-click (fn [evt]
+    ;;                             (on-double-click (find-row-id evt)))))
+    ;; (when on-right-click
+    ;;   (on table :right-click (fn [evt]
+    ;;                            (on-right-click (find-row-id evt)))))
     scroll-pane))
-
-(def test-data
-    (atom (for [i (range 100)]
-            {:name (str "Ahamay" (- 100 i))
-             :rank (str (inc (rand-int 23)) "k")})))
-
-  (def test-columns
-    [{:key :name, :caption "Name"       , :class String, :width 70}
-     {:key :rank, :caption "Spielstärke", :class String, :width 30}])
-
-  (def test-sort-keys
-    [:rank :name])
-
-  (defn show-player-info []
-    (println "player info"))
-
-  (defn test-it []
-    (let [f (JFrame.)
-          t (table test-columns test-data
-                   :sort-keys test-sort-keys
-                   :on-right-click #(println "right" %)
-                   :on-double-click #(println "double" %))]
-      (doto f
-        (.add t)
-        .pack
-        (.setVisible true))))

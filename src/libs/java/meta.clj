@@ -22,5 +22,8 @@
   (update-meta! o #(apply assoc % keyvals)))
 
 (defn type [o]
-  (or (meta o)
+  (or (when (or (keyword? o)
+                (class? o))
+        o)
+      (meta o)
       (core/type o)))

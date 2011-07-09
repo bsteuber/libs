@@ -324,10 +324,6 @@
   [o _ val]
   (.setText o (str val)))
 
-(defmethod set [JTextComponent :args]
-  [o _ [val]]
-  (set o :text val))
-
 (defmethod set [JCheckBox :value]
   [o _ val]
   (.setSelected o val))

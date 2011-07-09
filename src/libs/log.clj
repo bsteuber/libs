@@ -5,7 +5,11 @@
 
 (def log-level-index (zipmap log-levels (range (count log-levels))))
 
-(def current-log-index)
+(def ^:dynamic current-log-index)
+
+(defmacro with-log-level [level & body]
+  `(binding [current-log-index (log-level-index ~level)]
+     ~@body))
 
 (defn set-log-level [level]
   (def current-log-index (log-level-index level)))

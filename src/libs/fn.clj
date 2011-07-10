@@ -4,6 +4,20 @@
 (defn funcall [f arg]
   (f arg))
 
+(defn or-fn [& preds]
+  (fn [x]
+    (some #(% x)
+          preds)))
+
+(defn and-fn [& preds]
+  (fn [x]
+    (loop [ps preds]
+      (let [result ((first ps) x)
+            more   (next ps)]
+        (if (and result more)
+          (recur more)
+          result)))))
+
 ;;; from David Cabana's blog
 ;;; http://erl.nfshost.com/2011/05/22/map-mapp-and-mapc/
 

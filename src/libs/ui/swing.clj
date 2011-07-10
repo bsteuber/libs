@@ -65,16 +65,23 @@
                         RowFilter
                         SortOrder
                         SwingUtilities
+                        ToolTipManager
                         UIManager)
            (javax.swing.event DocumentListener
                               ListSelectionListener
                               PopupMenuListener)
            (javax.swing.table AbstractTableModel
-                              DefaultTableModel)
+                              DefaultTableModel
+                              DefaultTableCellRenderer)
            (javax.swing.text JTextComponent)))
 
 (derive JMenu      ::menu)
 (derive JPopupMenu ::menu)
+
+(defmacro invoke-later [& body]
+  `(SwingUtilities/invokeLater
+    (fn []
+      ~@body)))
 
 (defn window [& args]
   (config (JFrame.) args))
@@ -213,11 +220,6 @@
 
 (defn open [o]
   (conf o :open true))
-
-(defmacro invoke-later [& body]
-  `(SwingUtilities/invokeLater
-    (fn []
-      ~@body)))
 
 (defmethod set [Object :args]
   [o _ args]
@@ -722,6 +724,34 @@
         (setRowFilter (RowFilter/regexFilter regex 0)))
     (catch java.util.regex.PatternSyntaxException e)))
 
+(defn make-table-cell-renderer [render]
+  (proxy [DefaultTableCellRenderer] []
+    (setValue [val]
+      (render this val))))
+
+(defmethod set [JTable :column-renderer]
+  [o _ [col renderer]]
+  (.. o
+      (getColumn col)
+      (setCellRenderer renderer)))
+
+(defmethod set [JTable :disable-tooltips]
+  [o _ disable?]
+  (when disable?
+    (doto (ToolTipManager/sharedInstance)
+      (.unregisterComponent o)
+      (.unregisterComponent (.getTableHeader o)))))
+
+(defn mouse-evt->row-col [table evt]
+  (let [pt (.getPoint evt)
+        row (.rowAtPoint table pt)
+        col (.columnAtPoint table pt)]
+    (debug "mouse-evt-rowcol" row col)
+    (when-not (or (= -1 row)
+                  (= -1 col))
+      [(.convertRowIndexToModel    table row)
+       (.convertColumnIndexToModel table col)])))
+
 (defn table [& {:keys [columns
                        primary-key
                        data
@@ -761,3 +791,10 @@
     ;;   (on table :right-click (fn [evt]
     ;;                            (on-right-click (find-row-id evt)))))
     scroll-pane))
+
+(defn set-native-look []
+  (invoke-later
+   (UIManager/setLookAndFeel
+    (if (= "Linux" (System/getProperty "os.name"))
+      "com.sun.java.swing.plaf.nimbus.NimbusLookAndFeel"
+      (UIManager/getSystemLookAndFeelClassName)))))

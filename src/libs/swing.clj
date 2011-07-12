@@ -717,7 +717,7 @@
     (doseq [col columns]
       (->> col
            :key
-           translate
+           str
            (.addColumn table-model)))
     table-model))
 
@@ -780,8 +780,9 @@
     (m/assoc-meta! table
                    :keys       column-keys
                    :get-row-id get-row-id)
-    (doseq [{:keys [key width renderer]} columns]
-      (let [col (.getColumn table (translate key))]
+    (doseq [{:keys [key width renderer caption]} columns]
+      (let [col (.getColumn table (str key))]
+        (.setHeaderValue col (translate (or caption key)))
         (when renderer
           (.setCellRenderer col renderer))
         (when width

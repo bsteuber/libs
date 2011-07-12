@@ -1,4 +1,4 @@
-(ns libs.ui.swing
+(ns libs.swing
   (:refer-clojure :exclude [get set])
   (:use (clojure.contrib miglayout)
         (libs args
@@ -706,17 +706,6 @@
              (key (nth (vals @data-ref) row)))
            (catch Exception e (error e))))))
 
-(defn set-sort-keys [table column-model sort-keys]
-  (let [key->id (into {}
-                      (map-indexed (fn [id model]
-                                     [(:key model) id])
-                                   column-model))]
-    (.. table
-        getRowSorter
-        (setSortKeys (for [key sort-keys]
-                       (RowSorter$SortKey. (key->id key)
-                                           SortOrder/ASCENDING))))))
-
 (defn set-regex-filter [table regex]
   (try
     (.. table
@@ -729,19 +718,6 @@
     (setValue [val]
       (render this val))))
 
-(defmethod set [JTable :column-renderer]
-  [o _ [col renderer]]
-  (.. o
-      (getColumn col)
-      (setCellRenderer renderer)))
-
-(defmethod set [JTable :disable-tooltips]
-  [o _ disable?]
-  (when disable?
-    (doto (ToolTipManager/sharedInstance)
-      (.unregisterComponent o)
-      (.unregisterComponent (.getTableHeader o)))))
-
 (defn mouse-evt->row-col [table evt]
   (let [pt (.getPoint evt)
         row (.rowAtPoint table pt)
@@ -752,45 +728,97 @@
       [(.convertRowIndexToModel    table row)
        (.convertColumnIndexToModel table col)])))
 
-(defn table [& {:keys [columns
-                       primary-key
-                       data
-                       sort-keys
-                       on-right-click
-                       on-double-click]}]
-  (let [row-model   (make-row-model data columns primary-key)
-        table (doto (JTable. row-model)
-                (.setShowVerticalLines false)
-                (.setShowHorizontalLines false)
-                (.setAutoCreateRowSorter true)
-                (.setFillsViewportHeight true)
-                (.setSelectionMode ListSelectionModel/SINGLE_SELECTION))
-        scroll-pane (JScrollPane. table)
-        ;; find-row-id (fn [mouse-event]
-        ;;            (->> mouse-event
-        ;;                 .getPoint
-        ;;                 (.rowAtPoint table)
-        ;;                 (.convertRowIndexToModel table)
-        ;;                 (nth (keys @data))))
-        ]
+(defn make-table-model [{:keys [columns]}]
+  (let [classes     (vec (map :class columns))
+        table-model (proxy [DefaultTableModel] []
+                      (getColumnClass [col]
+                        (classes col)))]
+    (doseq [col columns]
+      (->> col
+           :key
+           translate
+           (.addColumn table-model)))
+    table-model))
 
-    ;; (dorun (map-indexed (fn [col col-model]
-    ;;                       (when-let [width (:width col-model)]
-    ;;                         (.. table
-    ;;                             getColumnModel
-    ;;                             (getColumn col)
-    ;;                             (setPreferredWidth width))))
-    ;;                     columns))
-    (add-watch data ::table (fn [_ _ _ _] (.fireTableDataChanged row-model)))
-    ;; (when sort-keys
-    ;;   (set-sort-keys table columns sort-keys))
-    ;; (when on-double-click
-    ;;   (on table :double-click (fn [evt]
-    ;;                             (on-double-click (find-row-id evt)))))
-    ;; (when on-right-click
-    ;;   (on table :right-click (fn [evt]
-    ;;                            (on-right-click (find-row-id evt)))))
-    scroll-pane))
+(defn add-table-row [table record]
+  (invoke-later
+   (let [keys (:keys (m/meta table))
+         ;; records don't implement IFn, so no (map record keys)
+         row   (to-array (map #(% record) keys))]
+     (.. table getModel (addRow row)))))
+
+(defn remove-table-row [table id]
+  (invoke-later
+   (let [model      (.getModel table)
+         get-row-id (:get-row-id (m/meta table))
+         row-number (some #(when (= (get-row-id %)
+                                    id)
+                             %)
+                          (range (.getRowCount model)))]
+     (.removeRow model row-number))))
+
+(defn clear-table [table]
+  (invoke-later
+   (.. table
+       getModel
+       getDataVector
+       removeAllElements)))
+
+(defn table [model & {:keys [tool-tip-generator
+                             on-right-click
+                             on-double-click]}]
+  (let [table-model (make-table-model model)
+        table (if tool-tip-generator
+                (proxy [JTable] [table-model]
+                  (getToolTipText [evt]
+                    (let [[row col] (mouse-evt->row-col this evt)]
+                      (when (and row col)
+                        (tool-tip-generator table-model row col)))))
+                (JTable. table-model))
+        {columns     :columns
+         sort-keys   :sort
+         primary-key :primary} model
+        column-keys (map :key columns)
+        key->index (into {}
+                         (map-indexed (fn [id col]
+                                        [(:key col) id])
+                                      columns))
+        sort-order {:asc  SortOrder/ASCENDING
+                    :desc SortOrder/DESCENDING}
+        get-row-id  (fn [row-number]
+                      ;; todo primary key of multiple columns
+                      (.getValueAt table-model
+                                   row-number
+                                   (key->index primary-key)))]
+    (m/assoc-meta! table
+                   :keys       column-keys
+                   :get-row-id get-row-id)
+    (doseq [{:keys [key width renderer]} columns]
+      (let [col (.getColumn table (translate key))]
+        (when renderer
+          (.setCellRenderer col renderer))
+        (when width
+          (.setPreferredWidth col width))))
+    (when on-double-click
+      (on table :double-click (fn [evt]
+                                (when-let [cell (mouse-evt->row-col table evt)]
+                                  (on-double-click cell)))))
+    (when on-right-click
+      (on table :right-click (fn [evt]
+                               (when-let [cell (mouse-evt->row-col table evt)]
+                                  (on-right-click cell)))))
+    (doto table
+      (.setShowVerticalLines false)
+      (.setShowHorizontalLines false)
+      (.setAutoCreateRowSorter true)
+      (.setFillsViewportHeight true)
+      (.setSelectionMode ListSelectionModel/SINGLE_SELECTION))
+    (when sort-keys (.. table
+                        getRowSorter
+                        (setSortKeys (for [[key order] sort-keys]
+                                       (RowSorter$SortKey. (key->index key)
+                                                           (sort-order order))))))
+    table))
 
 (defn set-native-look []
   (invoke-later

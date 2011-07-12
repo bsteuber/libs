@@ -641,17 +641,20 @@
   (doseq [[key handler] handlers]
     (add-key-handler o key handler)))
 
+(defn as-dimension [[width height]]
+  (Dimension. width height))
+
 (defmethod set [Component :min-size]
-  [o _ [width height]]
-  (.setMinimumSize o (Dimension. width height)))
+  [o _ sz]
+  (.setMinimumSize o (as-dimension sz)))
 
 (defmethod set [Component :pref-size]
-  [o _ [width height]]
-  (.setPreferredSize o (Dimension. width height)))
+  [o _ sz]
+  (.setPreferredSize o (as-dimension sz)))
 
 (defmethod set [Component :max-size]
-  [o _ [width height]]
-  (.setMaximumSize o (Dimension. width height)))
+  [o _ sz]
+  (.setMaximumSize o (as-dimension sz)))
 
 (defmethod set [Component :size]
   [o _ sz]
@@ -682,30 +685,6 @@
                              :align :center]))
           :open open)))
 
-(defn make-row-model [data-ref column-model p-key]
-  (proxy [AbstractTableModel] []
-    (getRowCount
-      []
-      (try (count @data-ref)
-           (catch Exception e (error e))))
-    (getColumnName
-      [col]
-      (try (:caption (column-model col))
-           (catch Exception e (error e))))
-    (getColumnCount
-      []
-      (try (count column-model)
-           (catch Exception e (error e))))
-    (getColumnClass
-      [col]
-      (try (:class (column-model col))
-           (catch Exception e (error e))))
-    (getValueAt
-      [row col]
-      (try (let [key (:key (column-model col))]
-             (key (nth (vals @data-ref) row)))
-           (catch Exception e (error e))))))
-
 (defn set-regex-filter [table regex]
   (try
     (.. table
@@ -731,6 +710,8 @@
 (defn make-table-model [{:keys [columns]}]
   (let [classes     (vec (map :class columns))
         table-model (proxy [DefaultTableModel] []
+                      (isCellEditable [row col]
+                        false)
                       (getColumnClass [col]
                         (classes col)))]
     (doseq [col columns]
@@ -759,15 +740,21 @@
 
 (defn clear-table [table]
   (invoke-later
-   (.. table
-       getModel
-       getDataVector
-       removeAllElements)))
+   (let [model (.getModel table)]
+     (while (> (.getRowCount model) 0)
+       (.removeRow model 0)))))
 
-(defn table [model & {:keys [tool-tip-generator
-                             on-right-click
-                             on-double-click]}]
-  (let [table-model (make-table-model model)
+(defmethod set [JTable :size]
+  [o _ sz]
+  (.setPreferredScrollableViewportSize o (as-dimension sz)))
+
+(deff table [args
+             tool-tip-generator
+             on-right-click
+             on-double-click
+             & more-args]
+  (let [[model] args
+        table-model (make-table-model model)
         table (if tool-tip-generator
                 (proxy [JTable] [table-model]
                   (getToolTipText [evt]
@@ -812,13 +799,14 @@
       (.setShowHorizontalLines false)
       (.setAutoCreateRowSorter true)
       (.setFillsViewportHeight true)
+      (.setAutoResizeMode JTable/AUTO_RESIZE_OFF)
       (.setSelectionMode ListSelectionModel/SINGLE_SELECTION))
     (when sort-keys (.. table
                         getRowSorter
                         (setSortKeys (for [[key order] sort-keys]
                                        (RowSorter$SortKey. (key->index key)
                                                            (sort-order order))))))
-    table))
+    (config table more-args)))
 
 (defn set-native-look []
   (invoke-later

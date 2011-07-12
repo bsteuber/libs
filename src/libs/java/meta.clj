@@ -25,5 +25,5 @@
   (or (when (or (keyword? o)
                 (class? o))
         o)
-      (meta o)
+      (:type (meta o))
       (core/type o)))

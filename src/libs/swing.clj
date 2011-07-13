@@ -84,6 +84,10 @@
     (fn []
       ~@body)))
 
+(defmethod config Component [o args]
+  (invoke-later (set-all o args))
+  o)
+
 (defn window [& args]
   (config (JFrame.) args))
 
@@ -186,9 +190,9 @@
                              v]))
                   (list* :column "[]20[]")
                   (grid :columns 2))]
-    (m/assoc-meta! form
-                   :type         ::form
-                   :form-mapping (apply hash-map args))
+    (invoke-later (m/assoc-meta! form
+                                 :type         ::form
+                                 :form-mapping (apply hash-map args)))
     form))
 
 (deff options [format-fn init layout args]
@@ -206,9 +210,10 @@
                                                            buttons))
                             :vertical   (vertical buttons))
         outer-panel   (panel inner-panel)]
-    (m/assoc-meta! outer-panel
-                   :type ::options
-                   :value-atom current-value)
+    (invoke-later
+     (m/assoc-meta! outer-panel
+                    :type ::options
+                    :value-atom current-value))
     outer-panel))
 
 (deff scrollable [arg & other-args]
@@ -686,16 +691,18 @@
                               :ok)
         cancel-button (button #(close d)
                               :cancel)]
-    (.. d getRootPane (setDefaultButton ok-button))
-    (conf d
-          :on {:key {:escape #(doto cancel-button
-                                .requestFocusInWindow
-                                (.doClick 100))}}
-          (vertical (concat args
-                            [(horizontal [ok-button [:tag :ok]
-                                          cancel-button [:tag :cancel]])
-                             :align :center]))
-          :open open)))
+    (invoke-later
+     (.. d getRootPane (setDefaultButton ok-button))
+     (conf d
+           :on {:key {:escape #(doto cancel-button
+                                 .requestFocusInWindow
+                                 (.doClick 100))}}
+           (vertical (concat args
+                             [(horizontal [ok-button [:tag :ok]
+                                           cancel-button [:tag :cancel]])
+                              :align :center]))
+           :open open))
+    d))
 
 (defmethod set [JScrollPane :horizontal]
   [o _ policy]
@@ -714,11 +721,10 @@
     (.setVerticalScrollBarPolicy o pol)))
 
 (defn set-regex-filter [table regex]
-  (try
-    (.. table
-        getRowSorter
-        (setRowFilter (RowFilter/regexFilter regex 0)))
-    (catch java.util.regex.PatternSyntaxException e)))
+  (invoke-later
+   (.. table
+       getRowSorter
+       (setRowFilter (RowFilter/regexFilter regex 0)))))
 
 (defn make-table-cell-renderer [render]
   (proxy [DefaultTableCellRenderer] []
@@ -729,7 +735,6 @@
   (let [pt (.getPoint evt)
         row (.rowAtPoint table pt)
         col (.columnAtPoint table pt)]
-    (debug "mouse-evt-rowcol" row col)
     (when-not (or (= -1 row)
                   (= -1 col))
       [(.convertRowIndexToModel    table row)
@@ -829,29 +834,31 @@
                         (.getValueAt table-model
                                      row-number
                                      (key->index primary-key))))]
-    (m/assoc-meta! table
-                   :keys       column-keys
-                   :get-row-id get-row-id)
-    (doseq [{:keys [key width renderer caption]} columns]
-      (let [col (.getColumn table (str key))]
-        (.setHeaderValue col (translate (or caption key)))
-        (when renderer
-          (.setCellRenderer col renderer))
-        (when width
-          (.setPreferredWidth col width))))
-    (doto table
-      (.setShowVerticalLines false)
-      (.setShowHorizontalLines false)
-      (.setAutoCreateRowSorter true)
-      (.setFillsViewportHeight true)
-      (.setAutoResizeMode JTable/AUTO_RESIZE_OFF)
-      (.setSelectionMode ListSelectionModel/SINGLE_SELECTION))
-    (when sort-keys (.. table
-                        getRowSorter
-                        (setSortKeys (for [[key order] sort-keys]
-                                       (RowSorter$SortKey. (key->index key)
-                                                           (sort-order order))))))
-    (config table more-args)))
+    (invoke-later
+     (m/assoc-meta! table
+                    :keys       column-keys
+                    :get-row-id get-row-id)
+     (doseq [{:keys [key width renderer caption]} columns]
+       (let [col (.getColumn table (str key))]
+         (.setHeaderValue col (translate (or caption key)))
+         (when renderer
+           (.setCellRenderer col renderer))
+         (when width
+           (.setPreferredWidth col width))))
+     (doto table
+       (.setShowVerticalLines false)
+       (.setShowHorizontalLines false)
+       (.setAutoCreateRowSorter true)
+       (.setFillsViewportHeight true)
+       (.setAutoResizeMode JTable/AUTO_RESIZE_OFF)
+       (.setSelectionMode ListSelectionModel/SINGLE_SELECTION))
+     (when sort-keys (.. table
+                         getRowSorter
+                         (setSortKeys (for [[key order] sort-keys]
+                                        (RowSorter$SortKey. (key->index key)
+                                                            (sort-order order))))))
+     (config table more-args))
+    table))
 
 (defn set-native-look []
   (invoke-later

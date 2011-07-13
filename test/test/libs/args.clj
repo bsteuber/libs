@@ -25,3 +25,11 @@
       (deff-tester :title :foo)         => [:foo nil nil nil []]
       (deff-tester :text :bar)          => [nil :bar nil nil []]
       (deff-tester 4 5 :title :baz 6 7) => [:baz nil 4 5 [:args [6 7]]])
+
+(deff deff-tester-2 [arg text & other-args]
+  [arg text other-args])
+
+(fact (deff-tester-2 42)               => [42 nil []]
+      (deff-tester-2 :text :foo 42)    => [42 :foo []]
+      (deff-tester-2 42 :bla :bla)     => [42 nil [:bla :bla]]
+      (deff-tester-2 1 2)              => (throws IllegalArgumentException))

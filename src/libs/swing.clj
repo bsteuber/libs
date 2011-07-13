@@ -63,6 +63,7 @@
                         ListSelectionModel
                         RowSorter$SortKey
                         RowFilter
+                        ScrollPaneConstants
                         SortOrder
                         SwingUtilities
                         ToolTipManager
@@ -145,20 +146,18 @@
                  :flowy
                  args)))
 
-(deff ask-user [title args]
-  (let [title  (or title :question)
-        [text] args]
+(deff ask-user [title arg]
+  (let [title  (or title :question)]
     (= JOptionPane/YES_OPTION
         (JOptionPane/showConfirmDialog
          nil
-         (translate text)
+         (translate arg)
          (translate title)
          JOptionPane/YES_NO_OPTION
          JOptionPane/QUESTION_MESSAGE))))
 
-(deff message [icon title type args]
+(deff message [icon title type arg]
   (let [type     (or type :plain)
-        [text]   args
         msg-type (case type
                        :error    JOptionPane/ERROR_MESSAGE
                        :info     JOptionPane/INFORMATION_MESSAGE
@@ -167,7 +166,7 @@
                        :plain    JOptionPane/PLAIN_MESSAGE)]
     (JOptionPane/showMessageDialog
      nil
-     (translate text)
+     (translate arg)
      (translate title)
      msg-type
      icon)))
@@ -212,8 +211,9 @@
                    :value-atom current-value)
     outer-panel))
 
-(defn scrollable [o]
-  (JScrollPane. o))
+(deff scrollable [arg & other-args]
+  (config (JScrollPane. arg)
+          other-args))
 
 (defn close [o]
   (conf o :close true))
@@ -400,36 +400,48 @@
             (popupMenuWillBecomeVisible   [_ evt] (when show   (show   evt)))
             (popupMenuWillBecomeInvisible [_ evt] (when hide   (hide   evt)))))))
 
-(defmethod on [Component :click]
-  [o _ handler]
+(defn add-click-handler [o handler]
   (with-handlers [handler]
     (.addMouseListener
      o
      (proxy [MouseAdapter] []
        (mouseClicked [evt]
-                     (handler evt))))))
+         ;; checking for one click only doesn't work
+         (handler evt))))))
 
-(defmethod on [Component :double-click]
-  [o _ handler]
+(defn add-double-click-handler [o handler]
   (with-handlers [handler]
-    (on o :click
-        (fn [evt]
-          (when (= (.getClickCount evt)
-                   2)
-            (handler evt))))))
+    (.addMouseListener
+     o
+     (proxy [MouseAdapter] []
+       (mouseClicked [evt]
+         (when (= (.getClickCount evt)
+                  2)
+           (handler evt)))))))
 
-(defmethod on [Component :right-click]
-  [o _ handler]
+(defn add-right-click-handler [o handler]
   (with-handlers [handler]
     (.addMouseListener
      o
      (proxy [MouseAdapter] []
        (mousePressed [evt]
-                     (when (.isPopupTrigger evt)
-                       (handler evt)))
+         (when (.isPopupTrigger evt)
+           (handler evt)))
        (mouseReleased [evt]
-                      (when (.isPopupTrigger evt)
-                        (handler evt)))))))
+         (when (.isPopupTrigger evt)
+           (handler evt)))))))
+
+(defmethod on [Component :click]
+  [o _ handler]
+  (add-click-handler o handler))
+
+(defmethod on [Component :double-click]
+  [o _ handler]
+  (add-double-click-handler o handler))
+
+(defmethod on [Component :right-click]
+  [o _ handler]
+  (add-right-click-handler o handler))
 
 (defmethod set [Component :enabled?]
   [o _ enabled?]
@@ -685,6 +697,22 @@
                              :align :center]))
           :open open)))
 
+(defmethod set [JScrollPane :horizontal]
+  [o _ policy]
+  (let [pol (case policy
+                  :always    ScrollPaneConstants/HORIZONTAL_SCROLLBAR_ALWAYS
+                  :never     ScrollPaneConstants/HORIZONTAL_SCROLLBAR_NEVER
+                  :as-needed ScrollPaneConstants/HORIZONTAL_SCROLLBAR_AS_NEEDED)]
+    (.setHorizontalScrollBarPolicy o pol)))
+
+(defmethod set [JScrollPane :vertical]
+  [o _ policy]
+  (let [pol (case policy
+                  :always    ScrollPaneConstants/VERTICAL_SCROLLBAR_ALWAYS
+                  :never     ScrollPaneConstants/VERTICAL_SCROLLBAR_NEVER
+                  :as-needed ScrollPaneConstants/VERTICAL_SCROLLBAR_AS_NEEDED)]
+    (.setVerticalScrollBarPolicy o pol)))
+
 (defn set-regex-filter [table regex]
   (try
     (.. table
@@ -728,11 +756,14 @@
          row   (to-array (map #(% record) keys))]
      (.. table getModel (addRow row)))))
 
+(defn table-row-id [table row]
+  ((-> table m/meta :get-row-id)
+   row))
+
 (defn remove-table-row [table id]
   (invoke-later
    (let [model      (.getModel table)
-         get-row-id (:get-row-id (m/meta table))
-         row-number (some #(when (= (get-row-id %)
+         row-number (some #(when (= (table-row-id table %)
                                     id)
                              %)
                           (range (.getRowCount model)))]
@@ -748,12 +779,31 @@
   [o _ sz]
   (.setPreferredScrollableViewportSize o (as-dimension sz)))
 
-(deff table [args
+(def sort-order
+  {:asc  SortOrder/ASCENDING
+   :desc SortOrder/DESCENDING})
+
+(defn table-cell-handler [table handler]
+  (fn [evt]
+    (when-let [cell (mouse-evt->row-col table evt)]
+      (handler cell))))
+
+(defmethod on [JTable :click]
+  [o _ handler]
+  (add-click-handler o (table-cell-handler o handler)))
+
+(defmethod on [JTable :double-click]
+  [o _ handler]
+  (add-double-click-handler o (table-cell-handler o handler)))
+
+(defmethod on [JTable :right-click]
+  [o _ handler]
+  (add-right-click-handler o (table-cell-handler o handler)))
+
+(deff table [arg
              tool-tip-generator
-             on-right-click
-             on-double-click
              & more-args]
-  (let [[model] args
+  (let [model arg
         table-model (make-table-model model)
         table (if tool-tip-generator
                 (proxy [JTable] [table-model]
@@ -770,13 +820,15 @@
                          (map-indexed (fn [id col]
                                         [(:key col) id])
                                       columns))
-        sort-order {:asc  SortOrder/ASCENDING
-                    :desc SortOrder/DESCENDING}
         get-row-id  (fn [row-number]
-                      ;; todo primary key of multiple columns
-                      (.getValueAt table-model
-                                   row-number
-                                   (key->index primary-key)))]
+                      (if (sequential? primary-key)
+                        (map #(.getValueAt table-model
+                                           row-number
+                                           (key->index %))
+                             primary-key)
+                        (.getValueAt table-model
+                                     row-number
+                                     (key->index primary-key))))]
     (m/assoc-meta! table
                    :keys       column-keys
                    :get-row-id get-row-id)
@@ -787,14 +839,6 @@
           (.setCellRenderer col renderer))
         (when width
           (.setPreferredWidth col width))))
-    (when on-double-click
-      (on table :double-click (fn [evt]
-                                (when-let [cell (mouse-evt->row-col table evt)]
-                                  (on-double-click cell)))))
-    (when on-right-click
-      (on table :right-click (fn [evt]
-                               (when-let [cell (mouse-evt->row-col table evt)]
-                                  (on-right-click cell)))))
     (doto table
       (.setShowVerticalLines false)
       (.setShowHorizontalLines false)

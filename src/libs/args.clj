@@ -50,19 +50,31 @@
             (recur more (assoc options key val) unread-args)
             (recur more options (conj unread-args key val))))))))
 
-
-;; TODO docstring etc.
 (defmacro deff
   "Defines a function with flexible keyword argument parsing"
   [name args & body]
   (let [[and-sym rest-args-sym] (take-last 2 args)
         [key-args rest-args-sym] (if (= and-sym '&)
                                    [(drop-last 2 args) rest-args-sym]
-                                   [args               (gensym)])]
+                                   [args               (gensym)])
+        arg? (some #{'arg} key-args)
+        options-sym (gensym "options")
+        [key-args bind-args] (if arg?
+                               [(conj key-args 'args)
+                                (remove #{'arg} key-args)]
+                               [key-args key-args])]
     `(defn ~name [& args#]
-       (let [[{:keys ~key-args}
+       (let [[~options-sym
               ~rest-args-sym] (parse-options
                                ~(vec (map keyword key-args))
-                               (parse-args args#))]
-         ~@body))))
+                               (parse-args args#))
+              {:keys ~bind-args} ~options-sym]
+         ~(if arg?
+            `(let [{args# :args} ~options-sym
+                   ~'arg (first args#)]
+               (when-not (= (count args#) 1)
+                 (throw (IllegalArgumentException.
+                         (str '~name " expects a single arg, but got " (vec args#)))))
+               ~@body)
+            `(do ~@body))))))
 

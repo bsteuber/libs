@@ -127,8 +127,16 @@
 (defn splitter [& args]
   (config (JSplitPane.) args))
 
-(defn tabs [& args]
-  (config (JTabbedPane.) args))
+(deff tabs [args & more]
+  (let [key->id (->> args
+                     (partition 2)
+                     (map first)
+                     (map-indexed (fn [i key]
+                                    [key i]))
+                     (into {}))
+        tabbed-pane (JTabbedPane.)]
+    (m/assoc-meta! tabbed-pane :key->id key->id)
+    (config tabbed-pane (list* :args args more))))
 
 (defn text-area [& args]
   (config (JTextArea. 3 15) args))
@@ -165,7 +173,7 @@
         msg-type (case type
                        :error    JOptionPane/ERROR_MESSAGE
                        :info     JOptionPane/INFORMATION_MESSAGE
-                       :warn     JOptionPane/WARNING_MESSAGE
+                       :warning  JOptionPane/WARNING_MESSAGE
                        :question JOptionPane/QUESTION_MESSAGE
                        :plain    JOptionPane/PLAIN_MESSAGE)]
     (JOptionPane/showMessageDialog
@@ -277,6 +285,11 @@
   [o _ kvs]
   (doseq [[name panel] (partition 2 kvs)]
     (.addTab o (translate name) panel)))
+
+(defn select-tab [tabs key]
+  (invoke-later
+   (let [key->id (:key->id (m/meta tabs))]
+     (.setSelectedIndex tabs (key->id key)))))
 
 (defmethod set [Component :border]
   [o _ borders]

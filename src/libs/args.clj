@@ -1,6 +1,12 @@
 (ns libs.args
   (:use (libs predicates)))
 
+(defn unpack-args [args]
+  (if (and (= (count args) 1)
+           (sequential? (first args)))
+    (first args)
+    args))
+
 (defn parse-args [args]
   (loop [args        args
          parsed-args []]

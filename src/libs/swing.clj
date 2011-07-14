@@ -142,13 +142,13 @@
 (defn layout [elements]
   (apply miglayout (JPanel.) elements))
 
-(deff horizontal [args]
-  (layout args))
+(defn horizontal [& args]
+  (layout (unpack-args args)))
 
-(deff vertical [args]
+(defn vertical [& args]
   (layout (list* :layout
                  :flowy
-                 args)))
+                 (unpack-args args))))
 
 (deff ask-user [title arg]
   (let [title  (or title :question)]
@@ -603,10 +603,11 @@
                    :opaque true
                    :border 1)]
     (reify ListCellRenderer
-           (getListCellRendererComponent
-            [_ list val index selected? focus?]
-            (conf lbl
-                  :background (if selected?
+      (getListCellRendererComponent
+        [_ list val index selected? focus?]
+        ;; don't use conf which does it in another thread and too late
+        (set-all lbl
+                 [:background (if selected?
                                 (.getSelectionBackground list)
                                 (.getBackground list))
                   :foreground (if selected?
@@ -614,7 +615,7 @@
                                 (.getForeground list))
                   ;; :font (.getFont list)
                   :icon (value->icon val)
-                  :text val)))))
+                  :text val])))))
 
 (defmethod set [Window :open]
   [o _ open?]

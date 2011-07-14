@@ -1,5 +1,8 @@
 (ns libs.def)
 
-(defmacro redef [name & fn-args]
+(defmacro redef [name val]
   `(alter-var-root (var ~name)
-                   (constantly (fn ~@fn-args))))
+                   (constantly ~val)))
+
+(defmacro redefn [name & fn-args]
+  `(redef ~name (fn ~@fn-args)))

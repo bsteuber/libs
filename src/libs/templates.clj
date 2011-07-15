@@ -47,5 +47,3 @@
             (-> result
                 (dissoc nil)
                 (update-with postprocessors))))))))
-
-(def parse-int #(Integer. %))

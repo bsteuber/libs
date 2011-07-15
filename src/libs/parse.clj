@@ -1,5 +1,11 @@
 (ns libs.parse)
 
 (defn parse-int [s]
-  (when-let [x (re-find #"\d+" s)]
-    (Integer. x)))
+  (try (Integer/parseInt s)
+       (catch NumberFormatException _)))
+
+(defn parse-float [s]
+  (try (Double/parseDouble s)
+       (catch NumberFormatException _)))
+
+(def parse-rational (comp rationalize parse-float))

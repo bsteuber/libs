@@ -1,5 +1,6 @@
 (ns test.libs.templates
   (:use (midje sweet)
+        (libs parse)
         [libs.regex :only [integer]]
         [libs.templates :reload true]))
 

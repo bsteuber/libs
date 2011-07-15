@@ -21,10 +21,14 @@
 (defn set-log-stdout [x]
   (def log-to-stdout x))
 
-(def log-file nil)
+(def ^:dynamic log-file nil)
 
 (defn set-log-file [f]
   (def log-file f))
+
+(defmacro with-log-file [f & body]
+  `(binding [log-file f]
+     ~@body))
 
 (def date-formatter (java.text.SimpleDateFormat. "yyyy-MM-dd kk:mm"))
 

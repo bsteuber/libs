@@ -6,3 +6,8 @@
 
 (defmacro redefn [name & fn-args]
   `(redef ~name (fn ~@fn-args)))
+
+(defmacro defall [value & names]
+  `(do
+     ~@(for [name names]
+         `(def ~name ~value))))

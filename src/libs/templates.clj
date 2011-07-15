@@ -47,3 +47,7 @@
             (-> result
                 (dissoc nil)
                 (update-with postprocessors))))))))
+
+(defn template-parser [templ]
+  (fn [s]
+    (parse-from-template templ s)))

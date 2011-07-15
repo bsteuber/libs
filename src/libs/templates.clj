@@ -1,5 +1,5 @@
 (ns libs.templates
-  (:use (libs regex)))
+  (:use (libs maps regex)))
 
 (defn make-template [& parts]
   (vec parts))
@@ -35,6 +35,17 @@
                            :else %)
                          extended-templ))
                    s)]
-        (if (string? result)
+        (let [postprocessors (->> templ
+                                  (map (fn [x]
+                                         (when (vector? x)
+                                           (let [[key _ postprocessor] x]
+                                             (when postprocessor
+                                               [key postprocessor])))))
+                                  (remove nil?))]
+          (if (string? result)
             {:matched result}
-            (dissoc result nil))))))
+            (-> result
+                (dissoc nil)
+                (update-with postprocessors))))))))
+
+(def parse-int #(Integer. %))

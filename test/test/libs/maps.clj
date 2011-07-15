@@ -18,3 +18,6 @@
       (diff-map {:a 1 :b 2} {:a 1}) => {:b 2}
       (diff-map {:a {:b 1 :c 2}} {:a {:b 1}}) => {:a {:c 2}}
       (diff-map {:a {:b 1 :c 2}} {:a {:b 1 :c 2}}) => {})
+
+(fact (update-with {:foo 1} {:foo inc}) => {:foo 2})
+(fact (update-with {:foo 1, :bar 2} {:foo inc :bar dec}) => {:foo 2, :bar 1})

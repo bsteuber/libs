@@ -44,6 +44,8 @@
 
 (def numeric (char-range \0 \9))
 
+(def integer (at-least-one numeric))
+
 (def ws (literal-regex #"\s"))
 
 (def non-ws (literal-regex #"\S"))

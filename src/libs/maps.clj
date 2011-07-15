@@ -27,3 +27,9 @@
                     m)))
           m1
           m2))
+
+(defn update-with [map updates]
+  (reduce (fn [m [key update-fn]]
+            (assoc m key (update-fn (key m))))
+          map
+          updates))

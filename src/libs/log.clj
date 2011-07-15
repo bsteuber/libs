@@ -27,7 +27,7 @@
   (def log-file f))
 
 (defmacro with-log-file [f & body]
-  `(binding [log-file f]
+  `(binding [log-file ~f]
      ~@body))
 
 (def date-formatter (java.text.SimpleDateFormat. "yyyy-MM-dd kk:mm"))

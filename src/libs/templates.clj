@@ -1,5 +1,5 @@
 (ns libs.templates
-  (:use (libs maps regex)))
+  (:use (libs maps parse regex)))
 
 (defn make-template [& parts]
   (vec parts))
@@ -25,17 +25,24 @@
 
 (defn parse-from-template [templ s]
   (when-not (nil? templ)
-    (let [extended-templ (interpose (many ws) templ)]
+    (let [splice (fn splice [xs]
+                   (apply concat
+                          (map #(if (seq? %)
+                                  (splice %)
+                                  [%])
+                               xs)))
+          spliced-templ (splice templ)
+          compiled-templ (map #(cond
+                                (vector? %) (named (first %) (second %))
+                                (keyword? %) (named % (at-least-one non-ws))
+                                :else %)
+                              spliced-templ)]
       (when-let
-          [result (match-re
-                   (regex
-                    (map #(cond
-                           (vector? %) (named (first %) (second %))
-                           (keyword? %) (named % (at-least-one non-ws))
-                           :else %)
-                         extended-templ))
-                   s)]
-        (let [postprocessors (->> templ
+          [result (match-re (->> compiled-templ
+                                 (interpose (many ws))
+                                 regex)
+                            s)]
+        (let [postprocessors (->> spliced-templ
                                   (map (fn [x]
                                          (when (vector? x)
                                            (let [[key _ postprocessor] x]
@@ -51,3 +58,15 @@
 (defn template-parser [templ]
   (fn [s]
     (parse-from-template templ s)))
+
+(defn as-int [key]
+  [key integer parse-int])
+
+(defn as-float [key]
+  [key floating parse-float])
+
+(defn in-parens [& args]
+  (concat ["("] args [")"]))
+
+(defn in-brackets [& args]
+  (concat ["["] args ["]"]))

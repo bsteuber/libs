@@ -46,6 +46,12 @@
 
 (def integer (at-least-one numeric))
 
+(def floating (one-of integer
+                      (group (maybe "-")
+                             (many numeric)
+                             "."
+                             (many numeric))))
+
 (def ws (literal-regex #"\s"))
 
 (def non-ws (literal-regex #"\S"))

@@ -23,6 +23,9 @@
 (defn one-of [& exprs]
   (apply hash-set exprs))
 
+(defn until [stop-chars]
+  (literal-regex (re-pattern (str "[^" stop-chars "]*"))))
+
 (def any re/any)
 
 (def repeated re/repeat)
@@ -31,6 +34,8 @@
   (repeated exp count count))
 
 (def many re/*)
+
+(def anything (many any))
 
 (def at-least-one re/+)
 

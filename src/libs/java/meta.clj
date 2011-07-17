@@ -9,11 +9,17 @@
 
 (reset-meta-map)
 
+;; makes sure the meta-map is not modified concurrently
+(def meta-thread-guard (agent nil))
+
 (defn meta [o]
   (.get meta-map o))
 
 (defn set-meta! [o v]
-  (.put meta-map o v))
+  (send meta-thread-guard
+        (fn [_]
+          (.put meta-map o v)))
+  (await meta-thread-guard))
 
 (defn update-meta! [o f & args]
   (set-meta! o (apply f (meta o) args)))

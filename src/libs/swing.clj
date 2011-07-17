@@ -84,8 +84,8 @@
     (fn []
       ~@body)))
 
-(defmethod config Component [o args]
-  (invoke-later (set-all o args))
+(defn conf! [o & args]
+  (invoke-later (config o args))
   o)
 
 (defn window [& args]
@@ -198,9 +198,9 @@
                              v]))
                   (list* :column "[]20[]")
                   (grid :columns 2))]
-    (invoke-later (m/assoc-meta! form
-                                 :type         ::form
-                                 :form-mapping (apply hash-map args)))
+    (m/assoc-meta! form
+                   :type         ::form
+                   :form-mapping (apply hash-map args))
     form))
 
 (deff options [format-fn init layout args]
@@ -218,10 +218,9 @@
                                                            buttons))
                             :vertical   (vertical buttons))
         outer-panel   (panel inner-panel)]
-    (invoke-later
-     (m/assoc-meta! outer-panel
-                    :type ::options
-                    :value-atom current-value))
+    (m/assoc-meta! outer-panel
+                   :type ::options
+                   :value-atom current-value)
     outer-panel))
 
 (deff scrollable [arg & other-args]
@@ -229,10 +228,10 @@
           other-args))
 
 (defn close [o]
-  (conf o :close true))
+  (conf! o :close true))
 
 (defn open [o]
-  (conf o :open true))
+  (conf! o :open true))
 
 (defmethod set [Object :args]
   [o _ args]
@@ -394,9 +393,9 @@
 (defmethod set [Component :popup-menu]
   [o _ menu]
   (on o :right-click (fn [e] (.show menu
-                                    (.getComponent e)
-                                    (.getX e)
-                                    (.getY e)))))
+                                   (.getComponent e)
+                                   (.getX e)
+                                   (.getY e)))))
 
 (defmethod set [Component :background]
   [o _ color]
@@ -775,6 +774,14 @@
          row   (to-array (map #(% record) keys))]
      (.. table getModel (addRow row)))))
 
+(defn add-table-rows [table records]
+  (invoke-later
+   (let [keys  (:keys (m/meta table))
+         model (.getModel table)]
+     (doseq [record records]
+       ;; records don't implement IFn, so no (map record keys)
+       (.addRow model (to-array (map #(% record) keys)))))))
+
 (defn table-row-id [table row]
   ((-> table m/meta :get-row-id)
    row))
@@ -848,35 +855,33 @@
                         (.getValueAt table-model
                                      row-number
                                      (key->index primary-key))))]
-    (invoke-later
-     (m/assoc-meta! table
-                    :keys       column-keys
-                    :get-row-id get-row-id)
-     (doseq [{:keys [key width renderer caption]} columns]
-       (let [col (.getColumn table (str key))]
-         (.setHeaderValue col (translate (or caption key)))
-         (when renderer
-           (.setCellRenderer col renderer))
-         (when width
-           (.setPreferredWidth col width))))
-     (doto table
-       (.setShowVerticalLines false)
-       (.setShowHorizontalLines false)
-       (.setAutoCreateRowSorter true)
-       (.setFillsViewportHeight true)
-       (.setAutoResizeMode JTable/AUTO_RESIZE_OFF)
-       (.setSelectionMode ListSelectionModel/SINGLE_SELECTION))
-     (when sort-keys (.. table
-                         getRowSorter
-                         (setSortKeys (for [[key order] sort-keys]
-                                        (RowSorter$SortKey. (key->index key)
-                                                            (sort-order order))))))
-     (config table more-args))
+    (m/assoc-meta! table
+                   :keys       column-keys
+                   :get-row-id get-row-id)
+    (doseq [{:keys [key width renderer caption]} columns]
+      (let [col (.getColumn table (str key))]
+        (.setHeaderValue col (translate (or caption key)))
+        (when renderer
+          (.setCellRenderer col renderer))
+        (when width
+          (.setPreferredWidth col width))))
+    (doto table
+      (.setShowVerticalLines false)
+      (.setShowHorizontalLines false)
+      (.setAutoCreateRowSorter true)
+      (.setFillsViewportHeight true)
+      (.setAutoResizeMode JTable/AUTO_RESIZE_OFF)
+      (.setSelectionMode ListSelectionModel/SINGLE_SELECTION))
+    (when sort-keys (.. table
+                        getRowSorter
+                        (setSortKeys (for [[key order] sort-keys]
+                                       (RowSorter$SortKey. (key->index key)
+                                                           (sort-order order))))))
+    (config table more-args)
     table))
 
 (defn set-native-look []
-  (invoke-later
-   (UIManager/setLookAndFeel
-    (if (= "Linux" (System/getProperty "os.name"))
-      "com.sun.java.swing.plaf.nimbus.NimbusLookAndFeel"
-      (UIManager/getSystemLookAndFeelClassName)))))
+  (UIManager/setLookAndFeel
+   (if (= "Linux" (System/getProperty "os.name"))
+     "com.sun.java.swing.plaf.nimbus.NimbusLookAndFeel"
+     (UIManager/getSystemLookAndFeelClassName))))

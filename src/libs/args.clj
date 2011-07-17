@@ -56,6 +56,17 @@
             (recur more (assoc options key val) unread-args)
             (recur more options (conj unread-args key val))))))))
 
+(defn parse-leading-options [option-keys args]
+  (let [take-key? (into #{} option-keys)]
+    (loop [remaining-args args
+           options        {}]
+      (if-not (seq remaining-args)
+        [options remaining-args]
+        (let [[key val & more] remaining-args]
+          (if (take-key? key)
+            (recur more (assoc options key val))
+            [options remaining-args]))))))
+
 (defmacro deff
   "Defines a function with flexible keyword argument parsing"
   [name args & body]

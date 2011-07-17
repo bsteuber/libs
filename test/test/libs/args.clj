@@ -2,6 +2,8 @@
   (:use libs.args
         midje.sweet))
 
+
+
 (fact (parse-args [])                  => []
       (parse-args [42])                => [:args [42]]
       (parse-args [[1 2 3]])           => [:args [1 2 3]]
@@ -12,8 +14,12 @@
       (parse-args [[] :a 4 [[]] 5 :b]) => [:args [] :a 4 :args [[]] :args [5 :b]]
       (parse-args [:a 1 [:x :y] :z 6]) => [:a 1 :args [:x :y] :z 6])
 
-(fact (parse-options [:a :b] [])               => [{} []])
-(fact (parse-options [:a :c] [:a 1 :b 2 :a 3]) => [{:a 1} [:b 2 :a 3]])
+(fact (parse-options [:a :b] [])               => [{} []]
+      (parse-options [:a :c] [:a 1 :b 2 :a 3]) => [{:a 1} [:b 2 :a 3]])
+
+(fact (parse-leading-options [:a :b] [])               => [{} []]
+      (parse-leading-options [:a :b] [:a 1 :b 2 :c 3]) => [{:a 1 :b 2} [:c 3]]
+      (parse-leading-options [:a :c] [:a 1 :b 2 :c 3]) => [{:a 1} [:b 2 :c 3]])
 
 (deff deff-tester [title text args & other-args]
   (let [[x y] args]

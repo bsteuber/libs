@@ -12,7 +12,7 @@
   (apply error args)
   (throw (RuntimeException. (str/join " " args))))
 
-;; Overwrite this using a hook
+;; Overwrite this using redef
 (defn handle-error [e]
   (let [trace (with-out-str (print-cause-trace e))]
     (fail trace)))

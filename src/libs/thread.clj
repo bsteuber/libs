@@ -9,4 +9,4 @@
 (defn handle-all-threads []
   (Thread/setDefaultUncaughtExceptionHandler
    (proxy [Thread$UncaughtExceptionHandler] []
-       (uncoughtException [thread e] (handle-error e)))))
+       (uncaughtException [thread e] (handle-error e)))))

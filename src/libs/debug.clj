@@ -15,4 +15,4 @@
 ;; Overwrite this using redef
 (defn handle-error [e]
   (let [trace (with-out-str (print-cause-trace e))]
-    (fail trace)))
+    (error trace)))

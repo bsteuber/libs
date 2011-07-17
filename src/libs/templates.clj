@@ -70,3 +70,6 @@
 
 (defn in-brackets [& args]
   (concat ["["] args ["]"]))
+
+(defn in-braces [& args]
+  (concat ["{"] args ["}"]))

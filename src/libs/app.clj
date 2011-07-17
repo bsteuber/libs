@@ -1,19 +1,32 @@
 (ns libs.app
-  (:require [clojure.java.io :as io])
-  (:use (libs io log)))
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str])
+  (:use (libs debug io log)))
 
-(defn app-name []
-  (warn "application name not set")
-  "my-app")
+(def app-name nil)
+
+(defn development-mode?
+  "Checks whether swank is on the classpath and thus we're developing"
+  []
+  (->> "java.class.path"
+       System/getProperty
+       (re-find #"swank")
+       boolean))
+
+(def production-mode?
+  (complement development-mode?))
 
 (defn app-dir []
-  (doto (if-let [appdata (System/getenv "APPDATA")]
-          (io/file appdata (app-name))
-          (io/file (System/getProperty "user.home")
-                   (str "." (app-name))))
-    (.mkdir)))
+  (when-not app-name
+    (fail "app-name must be set before calling app-dir"))
+  (if (development-mode?)
+    (make-dir "app-dir")
+    (if-let [appdata (System/getenv "APPDATA")]
+      ;; windows
+      (make-dir appdata (app-name))
+      ;; linux, mac
+      (make-dir (System/getProperty "user.home")
+              (str "." (app-name))))))
 
 (defn app-file [path]
-  (->> path
-       (map name)
-       (reduce io/file (app-dir))))
+  (make-file (app-dir) path))

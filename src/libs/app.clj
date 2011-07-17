@@ -5,6 +5,7 @@
 
 (def app-name nil)
 
+;; TODO: IDE neutral way?
 (defn development-mode?
   "Checks whether swank is on the classpath and thus we're developing"
   []
@@ -23,10 +24,10 @@
     (make-dir "app-dir")
     (if-let [appdata (System/getenv "APPDATA")]
       ;; windows
-      (make-dir appdata (app-name))
+      (make-dir appdata app-name)
       ;; linux, mac
       (make-dir (System/getProperty "user.home")
-              (str "." (app-name))))))
+                (str "." app-name)))))
 
 (defn app-file [path]
   (make-file (app-dir) path))

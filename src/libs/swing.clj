@@ -21,7 +21,9 @@
                      Container
                      Dimension
                      Event
+                     Toolkit
                      Window)
+           (java.awt.datatransfer StringSelection)
            (java.awt.event ActionListener
                            KeyAdapter
                            KeyEvent
@@ -885,3 +887,8 @@
    (if (= "Linux" (System/getProperty "os.name"))
      "com.sun.java.swing.plaf.nimbus.NimbusLookAndFeel"
      (UIManager/getSystemLookAndFeelClassName))))
+
+(defn copy-to-clipboard [text]
+  (.. (Toolkit/getDefaultToolkit)
+      getSystemClipboard
+      (setContents (StringSelection. text) nil)))
